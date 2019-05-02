@@ -142,7 +142,7 @@ public class AnnotationMirrorTestBuilder<T, B extends AnnotationMirrorTestBuilde
     }
 
     public AnnotationMirrorTestBuilder<B, ? extends AnnotationMirrorTestBuilder<B, ?>> testMemberAsAnnotation(String memberName) {
-        return new AnnotationMirrorTestBuilder<>(utils, (amtb) -> {
+        return (AnnotationMirrorTestBuilder/* JDK 8 javac compatibility */) new AnnotationMirrorTestBuilder<>(utils, (amtb) -> {
             return addPredicate("member-as-anno-" + memberName + "\n" + amtb._predicate().name(), (AnnotationMirror a) -> {
                 List<AnnotationMirror> mir = utils.annotationValues(a, memberName, AnnotationMirror.class);
                 Predicate<? super AnnotationMirror> p = amtb.predicate();
@@ -159,7 +159,7 @@ public class AnnotationMirrorTestBuilder<T, B extends AnnotationMirrorTestBuilde
 
     public B testMemberAsAnnotation(String memberName, Consumer<AnnotationMirrorTestBuilder<?, ? extends AnnotationMirrorTestBuilder<?, ?>>> c) {
         boolean[] built = new boolean[1];
-        AnnotationMirrorTestBuilder<Void, ?> res = new AnnotationMirrorTestBuilder<>(utils, (amtb) -> {
+        AnnotationMirrorTestBuilder<Void, ?> res = (AnnotationMirrorTestBuilder/* JDK 8 javac compatibility */)new AnnotationMirrorTestBuilder<>(utils, (amtb) -> {
             addPredicate("member-as-anno-" + memberName + "\n" + amtb._predicate().name(), (AnnotationMirror a) -> {
                 List<AnnotationMirror> mir = utils.annotationValues(a, memberName, AnnotationMirror.class);
                 Predicate<? super AnnotationMirror> p = amtb.predicate();

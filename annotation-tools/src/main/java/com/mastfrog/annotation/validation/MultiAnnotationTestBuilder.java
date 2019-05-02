@@ -205,7 +205,7 @@ public class MultiAnnotationTestBuilder {
         public AnnotationMirrorTestBuilderWithAssociatedElementTestsImpl whereMethodIsAnnotated(Consumer<MethodTestBuilder<?, ? extends MethodTestBuilder<?, ?>>> c) {
             boolean[] built = new boolean[1];
             assert annoType != null;
-            MethodTestBuilder<Void, ?> mtb = new MethodTestBuilder<>(utils, b -> {
+            MethodTestBuilder<Void, ?> mtb = (MethodTestBuilder/* JDK 8 javac compatibility */)new MethodTestBuilder<>(utils, b -> {
                 add(b._predicate(), ElementKind.METHOD);
                 built[0] = true;
                 return null;
@@ -220,7 +220,7 @@ public class MultiAnnotationTestBuilder {
         public AnnotationMirrorTestBuilderWithAssociatedElementTestsImpl whereFieldIsAnnotated(Consumer<ElementTestBuilder<VariableElement, ?, ? extends ElementTestBuilder<VariableElement, ?, ?>>> c) {
             boolean[] built = new boolean[1];
             assert annoType != null;
-            ElementTestBuilder<VariableElement, Void, ?> etb = new ElementTestBuilder<>(utils, b -> {
+            ElementTestBuilder<VariableElement, Void, ?> etb = (ElementTestBuilder /* JDK 8 javac compatibility */) new ElementTestBuilder<>(utils, b -> {
                 add(b._predicate(), ElementKind.FIELD);
                 built[0] = true;
                 return null;
@@ -235,7 +235,7 @@ public class MultiAnnotationTestBuilder {
         public AnnotationMirrorTestBuilderWithAssociatedElementTestsImpl whereClassIsAnnotated(Consumer<TypeElementTestBuilder<?, ? extends TypeElementTestBuilder<?, ?>>> c) {
             boolean[] built = new boolean[1];
             assert annoType != null;
-            TypeElementTestBuilder<Void, ?> tetb = new TypeElementTestBuilder<>(utils, b -> {
+            TypeElementTestBuilder<Void, ?> tetb = (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, b -> {
                 add(b._predicate(), ElementKind.CLASS);
                 add(b._predicate(), ElementKind.INTERFACE);
                 built[0] = true;

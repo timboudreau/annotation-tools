@@ -267,7 +267,7 @@ public final class AnnotationMirrorMemberTestBuilder<T> extends AbstractPredicat
 
 
     public TypeElementTestBuilder<AnnotationMirrorMemberTestBuilder<T>, ?> asTypeSpecifier() {
-        return new TypeElementTestBuilder<>(utils, tetb -> {
+        return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
             NamedPredicate<TypeElement> p = tetb._predicate();
             return addPredicate(memberName + "-as-type-element:" + p.name(), mir -> {
                 List<TypeElement> l = utils.typeElements(mir, memberName, this::fail);
@@ -278,7 +278,7 @@ public final class AnnotationMirrorMemberTestBuilder<T> extends AbstractPredicat
 
     public AnnotationMirrorMemberTestBuilder<T> asTypeSpecifier(Consumer<TypeElementTestBuilder<?, ?>> c) {
         boolean[] built = new boolean[1];
-        TypeElementTestBuilder<Void, ?> t = new TypeElementTestBuilder<>(utils, tetb -> {
+        TypeElementTestBuilder<Void, ?> t = (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
             addPredicate(tetb._predicate().listTransform(
                     am -> utils.typeElements(am, memberName, this::fail)));
             built[0] = true;
@@ -473,7 +473,7 @@ public final class AnnotationMirrorMemberTestBuilder<T> extends AbstractPredicat
     }
 
     public TypeElementTestBuilder<AnnotationMirrorMemberTestBuilder<T>, ?> valueAsTypeElement() {
-        return new TypeElementTestBuilder<>(utils, tmtb -> {
+        return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tmtb -> {
             return addPredicate(tmtb._predicate().name(), mir -> {
                 boolean result = true;
                 List<TypeMirror> l = utils.typeValues(mir, memberName, this::fail);
@@ -487,7 +487,7 @@ public final class AnnotationMirrorMemberTestBuilder<T> extends AbstractPredicat
 
     public AnnotationMirrorMemberTestBuilder<T> valueAsTypeElement(Consumer<TypeElementTestBuilder<?, ?>> c) {
         boolean[] built = new boolean[1];
-        TypeElementTestBuilder<Void, ?> b = new TypeElementTestBuilder<>(utils, tmtb -> {
+        TypeElementTestBuilder<Void, ?> b = (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tmtb -> {
             addPredicate(tmtb._predicate().name(), (AnnotationMirror mir) -> {
                 List<TypeMirror> l = utils.typeValues(mir, memberName, this::fail);
                 boolean result = true;

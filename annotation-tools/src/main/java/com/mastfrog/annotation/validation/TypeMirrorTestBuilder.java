@@ -193,7 +193,7 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
     }
 
     public TypeElementTestBuilder<TypeMirrorTestBuilder<T>, ? extends TypeElementTestBuilder<TypeMirrorTestBuilder<T>, ?>> asElement() {
-        return new TypeElementTestBuilder<>(utils, tetb -> {
+        return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
             return addPredicate(this::toTypeElement, tetb._predicate());
         });
     }
@@ -217,7 +217,7 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
     }
 
     public TypeMirrorTestBuilder<TypeMirrorTestBuilder<T>> testTypeParameterOfSupertypeOrInterface(String supertypeOrInterface, int typeParameter) {
-        return new TypeMirrorTestBuilder<>(utils, tmtb -> {
+        return(TypeMirrorTestBuilder /* JDK 8 javac compatibility */)  new TypeMirrorTestBuilder<>(utils, tmtb -> {
             typeKindMustBe(TypeKind.DECLARED);
             return addPredicate(() -> "type-parameter-" + typeParameter + "-of-supertype-or-interface:" + tmtb._predicate().name(), m -> {
                 TypeMirror sup = findSupertypeOrInterfaceOfType(m, supertypeOrInterface);

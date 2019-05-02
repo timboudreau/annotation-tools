@@ -7,6 +7,7 @@ import com.mastfrog.annotation.validation.TypeMirrorTestBuilder;
 import com.mastfrog.annotation.validation.MethodTestBuilder;
 import com.mastfrog.function.throwing.ThrowingRunnable;
 import com.mastfrog.function.throwing.ThrowingBooleanSupplier;
+import com.mastfrog.util.collections.CollectionUtils;
 import com.mastfrog.util.strings.Strings;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.AnnotationTypeMismatchException;
@@ -39,7 +40,6 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
-import org.openide.util.WeakSet;
 
 /**
  * Useful methods for extracting information from Java sources in an annotation
@@ -55,8 +55,9 @@ public final class AnnotationUtils {
     public static final String AU_LOG = "annoLog";
     private boolean log;
     private String logName;
-    private static Set<AnnotationUtils> INSTANCES = new WeakSet<>();
+    private static final Set<AnnotationUtils> INSTANCES = CollectionUtils.weakSet();
 
+    @SuppressWarnings("LeakingThisInConstructor")
     public AnnotationUtils(ProcessingEnvironment processingEnv, Set<String> supportedAnnotationTypes, Class<?> processorClass) {
         this.processingEnv = processingEnv;
         this.supportedAnnotationTypes = supportedAnnotationTypes == null
@@ -1250,8 +1251,12 @@ public final class AnnotationUtils {
         return (B) MethodTestBuilder.<B>createMethod(this);
     }
 
+    @SuppressWarnings("unchecked")
     public AnnotationMirrorTestBuilder<Predicate<? super AnnotationMirror>, ? extends AnnotationMirrorTestBuilder<?, ?>> testMirror() {
-        return new AnnotationMirrorTestBuilder<>(this, amtb -> amtb.predicate());
+        // XXX the line below compiles fine on JDK 9 but not on JDK 8, and we
+        // are still targetting JDK 8.  Compiler bug?  Better inferencing in 9?
+//        return new AnnotationMirrorTestBuilder<>(this, amtb -> amtb.predicate());
+        return new AnnotationMirrorTestBuilder(this, amtb -> ((AnnotationMirrorTestBuilder)amtb).predicate());
     }
 
     public MultiAnnotationTestBuilder multiAnnotations() {

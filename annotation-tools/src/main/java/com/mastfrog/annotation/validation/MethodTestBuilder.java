@@ -176,7 +176,7 @@ public class MethodTestBuilder<R, B extends MethodTestBuilder<R, B>> extends Ele
     }
 
     private MethodTestBuilder<B, ?> stb(Function<Predicate<? super ExecutableElement>, ? extends B> t) {
-        return new MethodTestBuilder<>(utils, stb -> {
+        return (MethodTestBuilder /* JDK 8 javac compatibility */) new MethodTestBuilder<>(utils, stb -> {
             return t.apply(stb.predicate());
         });
     }

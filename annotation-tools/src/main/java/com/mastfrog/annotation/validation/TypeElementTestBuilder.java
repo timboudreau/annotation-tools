@@ -44,7 +44,7 @@ public class TypeElementTestBuilder<R, B extends TypeElementTestBuilder<R, B>> e
     }
 
     public MethodTestBuilder<TypeElementTestBuilder<R, B>, ?> testMethod(String name, String... argTypes) {
-        return new MethodTestBuilder<>(utils, mtb -> {
+        return (MethodTestBuilder /* JDK 8 javac compatibility */) new MethodTestBuilder<>(utils, mtb -> {
             StringBuilder sb = new StringBuilder("test-for-method-" + name).append('(');
             for (int i = 0; i < argTypes.length; i++) {
                 String a = simpleName(argTypes[i]);
@@ -91,7 +91,7 @@ public class TypeElementTestBuilder<R, B extends TypeElementTestBuilder<R, B>> e
     }
 
     public MethodTestBuilder<TypeElementTestBuilder<R, B>, ?> testMethod(String name, List<? extends TypeMirror> argTypes) {
-        return new MethodTestBuilder<>(utils, mtb -> {
+        return (MethodTestBuilder /* JDK 8 javac compatibility */) new MethodTestBuilder<>(utils, mtb -> {
             return addPredicate("test-method-" + name + "(" + argTypes + ")", te -> {
                 ExecutableElement toTest = null;
                 outer:

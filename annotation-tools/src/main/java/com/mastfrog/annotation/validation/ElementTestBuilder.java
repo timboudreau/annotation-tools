@@ -70,7 +70,7 @@ public class ElementTestBuilder<E extends Element, R, B extends ElementTestBuild
     }
 
     public TypeElementTestBuilder<B, ? extends TypeElementTestBuilder<B, ?>> testContainingClass() {
-        return new TypeElementTestBuilder<>(utils, tetb -> {
+        return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
             return addPredicate(() -> "containing-class\n" + tetb._predicate().name(),
                     AnnotationUtils::enclosingType, (et, tp) -> {
                         return tetb.predicate().test(tp);
@@ -80,7 +80,7 @@ public class ElementTestBuilder<E extends Element, R, B extends ElementTestBuild
 
     public B testContainingClass(Consumer<TypeElementTestBuilder<B, ? extends TypeElementTestBuilder<B, ?>>> c) {
         boolean[] built = new boolean[1];
-        TypeElementTestBuilder<B, ? extends TypeElementTestBuilder<B, ?>> b = new TypeElementTestBuilder<>(utils, tetb -> {
+        TypeElementTestBuilder<B, ? extends TypeElementTestBuilder<B, ?>> b =(TypeElementTestBuilder /* JDK 8 javac compatibility */)  new TypeElementTestBuilder<>(utils, tetb -> {
             addPredicate(() -> "containing-class(" + tetb._predicate().name() + ")",
                     AnnotationUtils::enclosingType, (et, tp) -> {
                         return tetb.predicate().test(tp);
@@ -112,7 +112,7 @@ public class ElementTestBuilder<E extends Element, R, B extends ElementTestBuild
      * @return A builder
      */
     public TypeElementTestBuilder<B, ? extends TypeElementTestBuilder<B, ?>> testContainingClasses() {
-        return new TypeElementTestBuilder<>(utils, tetb -> {
+        return(TypeElementTestBuilder /* JDK 8 javac compatibility */)  new TypeElementTestBuilder<>(utils, tetb -> {
             return addPredicate(() -> "containing-classes\n" + tetb._predicate().name(),
                     el -> {
                         Element e = el;
@@ -186,7 +186,7 @@ public class ElementTestBuilder<E extends Element, R, B extends ElementTestBuild
     }
 
     public TypeElementTestBuilder<B, ? extends TypeElementTestBuilder<B, ?>> testOutermostClass() {
-        return new TypeElementTestBuilder<>(utils, tetb -> {
+        return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
             return addPredicate(() -> "outer-compilation-unit-class(" + tetb._predicate().name() + ")", AnnotationUtils::topLevelType, (et, tp) -> {
                 return tetb.predicate().test(tp);
             });
