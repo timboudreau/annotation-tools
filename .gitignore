@@ -10,3 +10,5 @@
 target/*
 /nbproject/
 nb-configuration.xml
+/annotation-tools/target/
+/java-vogon/target/
