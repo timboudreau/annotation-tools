@@ -15,7 +15,10 @@
         <module>annotation-tools</module>
         <module>java-vogon</module>
     </modules>
-    <url>https://github.com/timboudreau/annotation-tools</url>
+    <issueManagement>
+        <system>Github</system>
+        <url>https://github.com/timboudreau/annotation-tools/issues</url>
+    </issueManagement>
     <inceptionYear>2019</inceptionYear>
     <scm>
         <url>https://github.com/timboudreau/acteur</url>
