@@ -7,16 +7,18 @@
         <version>2.5.0-dev</version>
     </parent>
     <artifactId>java-vogon</artifactId>
+    <url>https://github.com/timboudreau/annotation-tools</url>
     <issueManagement>
         <system>Github</system>
         <url>https://github.com/timboudreau/annotation-tools/issues</url>
     </issueManagement>
     <inceptionYear>2019</inceptionYear>
     <scm>
-        <url>https://github.com/timboudreau/acteur</url>
+        <url>https://github.com/timboudreau/annotation-tools.git</url>
         <connection>scm:git:https://github.com/timboudreau/annotation-tools.git</connection>
         <developerConnection>git@github.com/timboudreau/annotation-tools.git</developerConnection>
     </scm>
+    
     <organization>
         <name>Mastfrog Technologies</name>
         <url>https://mastfrog.com</url>
@@ -24,7 +26,8 @@
     <licenses>
         <license>
             <name>MIT</name>
-            <url>http://opensource.org/licenses/MIT</url>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
         </license>
     </licenses>
     <developers>
