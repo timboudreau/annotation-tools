@@ -41,7 +41,6 @@ public abstract class AbstractLineOrientedRegistrationAnnotationProcessor extend
         super(processOnFinalRound, new LineIndexFactory(), annotationLegalOnFqns);
     }
 
-
     protected boolean addLine(String path, String line, Element... el) {
         Line l = new Line(lineCount++, el, line);
         return addIndexElement(path, l, el);

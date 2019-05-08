@@ -76,7 +76,7 @@ public abstract class AbstractRegistrationAnnotationProcessor<E extends IndexEnt
             return true;
         }
         for (String type : legalOn) {
-            if (utils.isSubtypeOf(e, type).isSubtype()) {
+            if (utils().isSubtypeOf(e, type).isSubtype()) {
                 return true;
             }
         }
@@ -106,7 +106,8 @@ public abstract class AbstractRegistrationAnnotationProcessor<E extends IndexEnt
     }
 
     @Override
-    public boolean handleProcess(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+    public boolean handleProcess(Set<? extends TypeElement> annotations,
+            RoundEnvironment roundEnv, AnnotationUtils utils) {
         Set<Element> all = utils.findAnnotatedElements(roundEnv);
         List<String> failed = new LinkedList<>();
 
@@ -119,18 +120,14 @@ public abstract class AbstractRegistrationAnnotationProcessor<E extends IndexEnt
             all.add(retry);
         }
         deferred.clear();
-//        utils.log("$$ FOUND " + all.size() + " ANNOTATED ELEMENTS");
         try {
             for (Element e : all) {
                 try {
 
                     Set<AnnotationMirror> annos = utils.findAnnotationMirrors(e);
-//                    utils.log("$$$$$$ Found " + annos.size() + " annotationMirrors on " + e.getSimpleName());
                     for (AnnotationMirror am : annos) {
-                        utils.log("$$$$$$$ DO " + am.getAnnotationType().asElement().getSimpleName() + " on " + e.getSimpleName());
                         if (isAcceptable(am)) {
                             int order = getOrder(am);
-//                            utils.log("$$$$$$$$ order " + order + " for " + e.getSimpleName());
                             if (!isLegalForAnnotation(e, am)) {
                                 String[] strings = legalOn.toArray(new String[legalOn.size()]);
                                 fail("Not a subclass of " + AnnotationUtils.join('/', strings) + ": " + e.asType(), e, am);
@@ -138,20 +135,15 @@ public abstract class AbstractRegistrationAnnotationProcessor<E extends IndexEnt
                             }
                             elements.add(e);
                             try {
-//                                utils.log("$$ HANDLE ONE WITH " + e.getSimpleName() + " " + e.asType());
-                                handleOne(e, am, order);
+                                handleOne(e, am, order, utils);
                             } catch (AnnotationTypeMismatchException ex) {
                                 fail(ex.getMessage(), e, am);
                                 return true;
                             }
-//                            utils.log("$ DONE " + e.getSimpleName());
                         } else {
-//                            utils.log("$$$$!!!! isAcceptable() returns false for " + e.getSimpleName());
                             fail("isAcceptable() fails for " + am, e, am);
-                            continue;
                         }
                     }
-
                 } catch (RuntimeException ex) {
                     if (ex.getMessage() != null && ex.getMessage().contains("Erroneous tree type")) {
                         fail(ex.getMessage(), e);
@@ -171,5 +163,5 @@ public abstract class AbstractRegistrationAnnotationProcessor<E extends IndexEnt
         return failed.isEmpty();
     }
 
-    protected abstract void handleOne(Element e, AnnotationMirror anno, int order);
+    protected abstract void handleOne(Element e, AnnotationMirror anno, int order, AnnotationUtils utils);
 }

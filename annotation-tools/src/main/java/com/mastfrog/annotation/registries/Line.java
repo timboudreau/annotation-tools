@@ -97,6 +97,7 @@ public final class Line implements IndexEntry {
         return null;
     }
 
+    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         String origin = origin();
