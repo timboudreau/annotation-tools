@@ -2263,6 +2263,43 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         }
 
+        public BlockBuilder<T> invoke(String method, Consumer<InvocationBuilder<?>> c) {
+            boolean[] closed = new boolean[1];
+            InvocationBuilder<Void> ib = new InvocationBuilder<>(b -> {
+                closed[0] = true;
+                statements.add(b);
+                return null;
+            }, method);
+            c.accept(ib);
+            if (!closed[0]) {
+                throw new IllegalStateException("InvocationBuilder.on() never called - "
+                        + "will not be added");
+            }
+            return this;
+        }
+
+        public AssignmentBuilder<BlockBuilder<T>> assign(String variable) {
+            return new AssignmentBuilder<>(b -> {
+                statements.add(new Composite(b, new Adhoc(";")));
+                return BlockBuilder.this;
+            }, new Adhoc(variable));
+        }
+
+        public BlockBuilder<T> assign(String variable, Consumer<AssignmentBuilder<?>> c) {
+            boolean[] closed = new boolean[1];
+            AssignmentBuilder<Void> ab = new AssignmentBuilder<>(b -> {
+                closed[0] = true;
+                statements.add(new Composite(b, new Adhoc(";")));
+                return null;
+            }, new Adhoc(variable));
+            c.accept(ab);
+            if (!closed[0]) {
+                throw new IllegalStateException(".to() not called on AssignmentBuilder - "
+                        + "statement not complete");
+            }
+            return this;
+        }
+
         public InvocationBuilder<BlockBuilder<T>> invoke(String method) {
             return new InvocationBuilder<>(ib -> {
                 statements.add(new WrappedStatement(ib));
@@ -3367,7 +3404,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             ArrayValueBuilder<?> bldr = addArrayArgument(name, new boolean[1]);
             c.accept(bldr);
             if (!built[0]) {
-                throw new IllegalStateException("closeArray() not called");
+                bldr.closeArray();
             }
             return this;
         }
