@@ -45,10 +45,13 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import javax.lang.model.element.Modifier;
 import static javax.lang.model.element.Modifier.FINAL;
@@ -63,6 +66,7 @@ import javax.tools.StandardLocation;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -117,6 +121,10 @@ public class GenerateClassesTest {
         c.accept(100);
         assertEquals(-976404, proxy.lastValue());
         Object[] stuff = proxy.getStuff();
+
+        assertFalse(proxy.notBool(), srcMessage("If statement was not negated", "AnnotationsAndLambdas",
+                "notBool", "privvy"));
+
         for (int i = 0; i < stuff.length; i++) {
 //            System.out.println(i + ".\t" + stuff[i].getClass().getName() + "\t" + stuff[i]);
             Object o = stuff[i];
@@ -153,6 +161,23 @@ public class GenerateClassesTest {
         }
     }
 
+    static Map<String, ClassBuilder<String>> sources = new HashMap<>();
+
+    static Supplier<String> srcMessage(String message, String type, String... methd) {
+        return () -> {
+            ClassBuilder<String> cb = sources.get(type);
+            if (cb != null) {
+                StringBuilder sb = new StringBuilder(message).append(" - sources in ").append(type).append(" \n\n");
+                for (String m : methd) {
+                    sb.append(cb.methodSource(m));
+                    sb.append('\n');
+                }
+                return sb.toString();
+            }
+            return message + " (no class '" + type + "' in " + sources.keySet() + ")";
+        };
+    }
+
     @BeforeAll
     public static void setup() throws Exception {
         dir = FileUtils.newTempDir();
@@ -170,6 +195,7 @@ public class GenerateClassesTest {
             Files.write(file, body.getBytes(UTF_8));
             javaSources.add(file);
             JavaFileObject fo = mgr.getJavaFileForInput(StandardLocation.SOURCE_PATH, cb.fqn(), Kind.SOURCE);
+            sources.put(cb.className(), cb);
             fos.add(fo);
         });
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -186,7 +212,8 @@ public class GenerateClassesTest {
 
     @AfterAll
     public static void teardown() throws IOException {
-        FileUtils.deltree(dir);
+        System.out.println("dir " + dir);
+//        FileUtils.deltree(dir);
     }
 
     private static void generateClasses(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {
@@ -299,6 +326,17 @@ public class GenerateClassesTest {
                     .body().returningInvocationOf("currentTimeMillis").on("System").endBlock();
         });
 
+        cb.privateMethod("privvy").returning("boolean").addArgument("int", "ignored")
+                .body().statement("return true").endBlock();
+
+        cb.publicMethod("notBool", mb -> {
+            mb.returning("boolean").body(bb -> {
+                bb.iff().not().invokeAsBoolean("privvy").withArgument("7").inScope()
+                        .statement("return true").endIf();
+                bb.returning("false");
+            });
+        });
+
         c.accept(cb);
     }
 
@@ -333,6 +371,8 @@ public class GenerateClassesTest {
         long time();
 
         long time2();
+
+        boolean notBool();
     }
 
     private Object lastProxied;

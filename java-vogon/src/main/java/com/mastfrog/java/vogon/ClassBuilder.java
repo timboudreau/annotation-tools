@@ -70,6 +70,20 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
+    String methodSource(String name) { // for tests
+        for (BodyBuilder bb : members) {
+            if (bb instanceof MethodBuilder<?>) {
+                MethodBuilder<?> mb = (MethodBuilder<?>) bb;
+                if (name.equals(mb.name)) {
+                    LinesBuilder lb = new LinesBuilder();
+                    mb.buildInto(lb);
+                    return lb.toString();
+                }
+            }
+        }
+        return "<did not find method '" + name + "'>";
+    }
+
     public AnnotationMethodBuilder<ClassBuilder<T>> annotationMethod(String method) {
         return new AnnotationMethodBuilder<>(amb -> {
             members.add(amb);
@@ -1368,9 +1382,18 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public MethodBuilder<T> withTypeParam(String first, String... more) {
-            typeParams.add(first);
-            typeParams.addAll(Arrays.asList(more));
+            addTypeParam(first);
+            for (String m : more) {
+                addTypeParam(m);
+            }
             return this;
+        }
+
+        private void addTypeParam(String tp) {
+            if (typeParams.contains(tp)) {
+                throw new IllegalStateException("Already have a type parameter '" + tp + " - cannot be added twice");
+            }
+            typeParams.add(tp);
         }
 
         public MethodBuilder<T> makeFinal() {
@@ -1378,7 +1401,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public MethodBuilder<T> throwing(String throwable) {
-            throwing.add(new Adhoc(throwable, true));
+//            throwing.add(new Adhoc(throwable, true));
+            throwing.add(parseTypeName(throwable));
             return this;
         }
 
@@ -1542,31 +1566,33 @@ public final class ClassBuilder<T> implements BodyBuilder {
                     lb.commaDelimit(typeParams.toArray(new String[typeParams.size()]));
                 });
             }
-            lines.word(type);
-            lines.word(name);
-            lines.wrappable(lb1 -> {
-                lines.parens(lb -> {
-                    for (Iterator<BodyBuilder[]> it = args.iterator(); it.hasNext();) {
-                        BodyBuilder[] curr = it.next();
-                        assert curr.length == 2;
-                        curr[0].buildInto(lb);
-                        curr[1].buildInto(lines);
-                        if (it.hasNext()) {
-                            lb.appendRaw(',');
+            lines.word(type, true);
+            lines.word(name, true);
+            lines.hangingWrap(ll -> {
+                lines.wrappable(lb1 -> {
+                    lines.parens(lb -> {
+                        for (Iterator<BodyBuilder[]> it = args.iterator(); it.hasNext();) {
+                            BodyBuilder[] curr = it.next();
+                            assert curr.length == 2;
+                            curr[0].buildInto(lb);
+                            curr[1].buildInto(lines);
+                            if (it.hasNext()) {
+                                lb.appendRaw(',');
+                            }
+                        }
+                    });
+                    if (!throwing.isEmpty()) {
+                        lb1.word("throws");
+                        for (Iterator<BodyBuilder> it = throwing.iterator(); it.hasNext();) {
+                            BodyBuilder th = it.next();
+                            th.buildInto(lb1);
+                            if (it.hasNext()) {
+                                lb1.appendRaw(",");
+                            }
                         }
                     }
                 });
             });
-            if (!throwing.isEmpty()) {
-                lines.word("throws");
-                for (Iterator<BodyBuilder> it = throwing.iterator(); it.hasNext();) {
-                    BodyBuilder th = it.next();
-                    th.buildInto(lines);
-                    if (it.hasNext()) {
-                        lines.appendRaw(",");
-                    }
-                }
-            }
             if (block != null) {
                 lines.block(lb -> {
                     block.buildInto(lb);
@@ -1627,7 +1653,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
     private static final Pattern VARARG = Pattern.compile("\\s*?(.*?)\\s*?\\.\\.\\.");
 
     static BodyBuilder parseTypeName(String typeName) {
-        Matcher arrM = ARRAY.matcher(typeName);
+        Matcher arrM = ARRAY.matcher(notNull("typeName", typeName));
         if (arrM.find()) {
             String tn = arrM.group(1);
             String arrDecl = arrM.group(2);
@@ -1640,13 +1666,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
             BodyBuilder result = parseTypeName(tn);
             return new Composite(result, new BackupRaw("..."));
         }
-        if (checkIdentifier(notNull("typeName", typeName)).indexOf('<') >= 0) {
+        if (checkIdentifier(typeName).indexOf('<') >= 0) {
             GenericTypeVisitor gtv = new GenericTypeVisitor();
             visitGenericTypes(typeName, 0, gtv);
             return gtv.result();
         } else {
-            TypeNameItem tni = new TypeNameItem(typeName);
-            return tni;
+            return new TypeNameItem(typeName);
         }
     }
 
@@ -5337,14 +5362,15 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public InvocationBuilder<T> invokeAsBoolean(String what) {
             return new InvocationBuilder<>(ib -> {
-                return converter.apply(ib);
+                clause = ib;
+                return converter.apply(this);
             }, what);
         }
 
         public InvocationBuilder<ComparisonBuilder<T>> invoke(String what) {
             return new InvocationBuilder<>(ib -> {
                 clause = ib;
-                return new ComparisonBuilder<>(ConditionBuilder.this);
+                return new ComparisonBuilder<>(this);
             }, what);
         }
 
@@ -5377,7 +5403,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             clause = new Adhoc(Boolean.toString(val));
             FinishableConditionBuilder<T> result = new FinishableConditionBuilder<>(fcb -> {
                 return converter.apply(fcb);
-            }, new ConditionRightSideBuilder<>(null, clause, null), null);
+            }, new ConditionRightSideBuilder<>(null, this, null), null);
             return result;
         }
 
@@ -5504,6 +5530,9 @@ public final class ClassBuilder<T> implements BodyBuilder {
         ConditionRightSideBuilder(Function<BodyBuilder, T> converter, BodyBuilder leftSide, ComparisonOperation op) {
             this.converter = converter;
             this.leftSide = leftSide;
+            if (leftSide instanceof ConditionBuilder<?>) {
+                negated = ((ConditionBuilder<?>) ((ConditionBuilder<?>) leftSide)).negated;
+            }
             this.op = op;
         }
 

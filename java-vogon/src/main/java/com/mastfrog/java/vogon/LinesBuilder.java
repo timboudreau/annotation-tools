@@ -183,10 +183,18 @@ public class LinesBuilder {
         return word(what, true);
     }
 
+    private boolean hr;
+    void hangingWrap(Consumer<LinesBuilder> c) {
+        boolean old = hr;
+        hr = true;
+        c.accept(this);
+        hr = old;
+    }
+
     private int wrapDepth;
 
     private boolean inHangingWrap() {
-        return wrapDepth > 0;
+        return hr || wrapDepth > 0;
     }
 
     public LinesBuilder word(String what, boolean hangingWrap) {
