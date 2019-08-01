@@ -142,11 +142,64 @@ code which takes advantage of lambdas for clarity and scoping:
     }
 ```
 
-As you can see from the two different styles of declaring annotations, with most things, you can either provide
-a `Consumer` for an element, or add it imperatively (sometimes this requires a closeSomething() or endSomething()
+The API consists of builders for various elements of a Java source, the entry point to
+all of which is `ClassBuilder` (typically using `ClassBuilder.forPackage(somePackage).named(className)`).
+
+
+### Consumer vs. Imperative Invocation
+
+Code generation methods generally come in two forms:
+
+ * _Imperative_ - returns a different type of builder that lets you build and close the element requested,
+e.g. `classBuilder.method("getFoo").returning("String").body().returningStringLiteral("foo").endBlock()`
+ * _Consumer-Based_ - the method takes a `Consumer` and perhaps some other argument;  the consumer must
+complete the builder it is passed (immediately), e.g. 
+```classBuilder.overridePublic("getFoo", mb -> {
+    mb.returning("String").body (bb -> {
+        bb.returningStringLiteral("foo");
+    });
+});```
+
+Choosing which to use is usually a matter of preference and readability, but there are some differences:
+
+ * With the imperative form, it is easier to leave class elements uncompleted and then wonder why some
+code is never generated
+ * With the consumer form, if there is a single natural exit point for a builder (such as `endBlock()` 
+on a code block builder), it will be called for you if you don't call it, so less boilerplate is needed; 
+in some cases where there are multiple exit points, but one is very common, that will be called for you
+if you did not call one of the others (for example, an `InvocationBuilder` will get `inScope()` called on
+it, making it a reference method call on the current class or a static import, if you did not specify 
+what to use).  If there is no natural exit point, an `IllegalStateException` will be thrown if the
+consumer left a builder unfinished so there is no valid code to add.
+ * The imperative form is useful if you structured your generation code such that you want to be able
+to keep a builder around for a while while generating other code - for example, if there is a static
+block that will initialize some fields, and multiple pieces of code will need to contribute to it
+as the rest of the class is generated
+
+As you can see from the two different styles of declaring annotations in the example above, with most things, 
+you can either provide
+a `Consumer` for an element, or add it imperatively (requiring the closeAnnotation()
 call to close the builder, which is implicit in exiting the lambda), so you are free to choose which style you
 prefer based on taste or readability.
 
+Note that, in almost all methods that take a consumer, the generic type of the builder the consumer
+is passed is <code>?</code> and the method that closes that builder will return null - this is so
+that there are not two code paths by which the parent element could be altered, which would get
+confusing quickly.  So, for example, the two <code>ClassBuilder.method</code> methods have
+signatures like:
+
+ * `MethodBuilder&lt;ClassBuilder&lt;T&gt;&gt; method(String methodName)` returns a `MethodBuilder` whose
+`closeMethod()` method must be called to add it to the `ClassBuilder` it came from, and which returns
+that `ClassBuilder`.
+ * `ClassBuilder&lt;T&gt; method(String methodName, Consumer&lt;MethodBuilder&lt;?&gt;&gt;)` passes 
+a `MethodBuilder` to the passed consumer, whose
+`closeMethod()` method need not be called (but it is harmless) to add it to the `ClassBuilder` it came from, and which returns
+null (you continue adding to the `ClassBuilder` using the return value of `method(String, Consumer)` while
+you create the method's signature and body in the consumer.  When the Consumer exits, the method is
+automatically added to the `ClassBuilder`
+
+This pattern is repeated throughout the API.
+ 
 
 NetBeans Module Layer Support
 -----------------------------

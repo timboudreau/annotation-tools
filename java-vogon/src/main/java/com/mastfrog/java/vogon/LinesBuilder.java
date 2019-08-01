@@ -146,6 +146,28 @@ public class LinesBuilder {
 
     private String wrapPrefix;
 
+    public char lastNonWhitespaceChar() {
+        int pos = sb.length()-1;
+        while (pos >= 0) {
+            char c = sb.charAt(pos);
+            if (!Character.isWhitespace(c)) {
+                return c;
+            }
+            pos--;
+        }
+        return 0;
+    }
+
+    public LinesBuilder word(String what, char ifNotPrecededBy, boolean hangingWrap) {
+        hangingWrap = hangingWrap || inParens;
+        char last = lastNonWhitespaceChar();
+        if (last == ifNotPrecededBy) {
+            return appendRaw(what);
+        } else {
+            return word(what, hangingWrap);
+        }
+    }
+
     public LinesBuilder withWrapPrefix(String pfx, Consumer<LinesBuilder> c) {
         String old = wrapPrefix;
         wrapPrefix = pfx;
@@ -361,8 +383,14 @@ public class LinesBuilder {
         return this;
     }
 
+    private boolean inParens;
     public LinesBuilder parens(Consumer<LinesBuilder> c) {
-        return delimit('(', ')', c);
+        return delimit('(', ')', lb -> {
+            boolean wasInParens = inParens;
+            inParens = true;
+            c.accept(lb);
+            inParens = wasInParens;
+        });
     }
 
     public LinesBuilder delimit(char start, char end, Consumer<LinesBuilder> c) {
