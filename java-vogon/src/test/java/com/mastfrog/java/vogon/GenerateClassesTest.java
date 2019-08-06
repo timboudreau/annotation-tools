@@ -424,6 +424,5 @@ public class GenerateClassesTest {
             }
             return result;
         }
-
     }
 }

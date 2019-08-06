@@ -313,6 +313,9 @@ public class LinesBuilder {
         if (didNewLine && inHangingWrap()) {
             sb.append(this.indent());
         }
+        if (didNewLine && wrapPrefix != null) {
+            sb.append(wrapPrefix);
+        }
         return this;
     }
 

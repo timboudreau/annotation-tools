@@ -720,19 +720,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
     }
 
     private void writeDocComment(LinesBuilder lb) {
-        if (docComment == null) {
-            return;
-        }
+        writeDocComment(docComment, lb);
         lb.onNewLine();
-        lb.appendRaw("/**");
-        lb.onNewLine().appendRaw(" * ");
-        lb.withWrapPrefix(" * ", lb1 -> {
-            for (String word : docComment.split("\\s")) {
-                lb.word(word, false);
-            }
-        });
-        lb.onNewLine();
-        lb.appendRaw("**/");
     }
 
     @Override
@@ -1368,6 +1357,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private BodyBuilder block;
         private String type = "void";
         private final String name;
+        private String docComment;
 
         MethodBuilder(Function<MethodBuilder<T>, T> converter, String name, Modifier... modifiers) {
             this.converter = converter;
@@ -1375,6 +1365,15 @@ public final class ClassBuilder<T> implements BodyBuilder {
             for (Modifier m : modifiers) {
                 withModifier(m);
             }
+        }
+
+        public MethodBuilder<T> docComment(String cmt) {
+            if (this.docComment != null) {
+                this.docComment += "\n" + cmt;
+            } else {
+                this.docComment = cmt;
+            }
+            return this;
         }
 
         public MethodBuilder<T> withTypeParam(String param) {
@@ -1553,6 +1552,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
         @Override
         public void buildInto(LinesBuilder lines) {
             lines.doubleNewline();
+            if (docComment != null) {
+                writeDocComment(docComment, lines);
+                lines.onNewLine();
+            }
             if (!annotations.isEmpty()) {
                 for (BodyBuilder bb : annotations) {
                     bb.buildInto(lines);
@@ -6242,6 +6245,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private final Set<Modifier> modifiers = new TreeSet<>();
         private final String name;
         private Set<AnnotationBuilder> annotations = new LinkedHashSet<>();
+        private String docComment;
 
         FieldBuilder(Function<FieldBuilder<T>, T> converter, String name) {
             this.converter = converter;
@@ -6388,6 +6392,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
         @Override
         public void buildInto(LinesBuilder lines) {
             lines.onNewLine();
+            if (docComment != null) {
+                writeDocComment(docComment, lines);
+                lines.onNewLine();
+            }
             for (AnnotationBuilder<?> ab : annotations) {
                 ab.buildInto(lines);
             }
@@ -6477,6 +6485,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
             for (Modifier m : mods) {
                 addModifier(m);
             }
+            return this;
+        }
+
+        public FieldBuilder<T> docComment(String docComment) {
+            this.docComment = docComment;
             return this;
         }
 
@@ -6701,5 +6714,78 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return sb.toString();
         }
         return s;
+    }
+
+    private static void writeDocComment(String docComment, LinesBuilder lb) {
+        if (docComment == null) {
+            return;
+        }
+        lb.onNewLine();
+        lb.appendRaw("/**");
+        lb.onNewLine().appendRaw(" * ");
+        lb.withWrapPrefix(" * ", lb1 -> {
+            boolean anyParagraphs = false;
+            boolean lastWasPara = false;
+            String[] lines = docComment.split("\n");
+
+            for (int i = 0; i < lines.length; i++) {
+                // XXX if any paragraphs, close paragraph before a line
+                // starting with @
+                String line = lines[i].trim();
+                if (line.isEmpty()) {
+                    String next = i == lines.length - 1 ? null : lines[i + 1].trim();
+                    if (next.isEmpty()) {
+                        continue;
+                    } else if (next.startsWith("<")) {
+                        lb.onNewLine();
+                    } else if (next.startsWith("@")) {
+                        if (anyParagraphs) {
+                            lb.appendRaw("</p>");
+                            lb.onNewLine();
+                        }
+                    } else {
+                        lb.onNewLine();
+                        lb.word("</p><p>");
+                        lb.onNewLine();
+                        lastWasPara = true;
+                        anyParagraphs = true;
+                    }
+                    continue;
+                }
+                for (String word : line.split("\\s")) {
+                    lb.word(word, false);
+                }
+
+                if (!lastWasPara && i != lines.length - 1) {
+                    boolean nextIsTag = lines[i + 1].trim().startsWith("<")
+                            || lines[i + 1].trim().startsWith("@");
+                    if (!nextIsTag) {
+                        if (anyParagraphs) {
+                            lb.onNewLine();
+                            lb.word("</p><p>");
+                            lb.onNewLine();
+                            anyParagraphs = true;
+                            lastWasPara = true;
+                        } else {
+                            lb.onNewLine();
+                            lb.word("<p>");
+                            lb.onNewLine();
+                            anyParagraphs = true;
+                            lastWasPara = true;
+                        }
+                    }
+                } else {
+                    lastWasPara = false;
+                }
+                if (i != lines.length - 1) {
+                    lb.onNewLine();
+                }
+            }
+            if (anyParagraphs) {
+                lb.appendRaw("</p>");
+            }
+        });
+        lb.onNewLine();
+        lb.appendRaw(" **/");
     }
 }
