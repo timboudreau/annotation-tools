@@ -106,7 +106,9 @@ public class GenerateClassesTest {
         }
         assertEquals(1, annos.length);
         String annoString = annos[0].toString();
-        assertEquals("@com.mastfrog.java.vogon.test.SomeAnnotation(value=\"Hoober\", thing=56)", annoString);
+        // JDK in continuous build apparently doesn't quote strings in annotations?
+        assertEquals("@com.mastfrog.java.vogon.test.SomeAnnotation(value=Hoober, thing=56)", 
+                annoString.replace("\"", ""));
         assertEquals(0, proxy.lastValue());
 
         assertTrue(proxy.time() <= System.currentTimeMillis());
