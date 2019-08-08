@@ -186,8 +186,11 @@ public class GenerateClassesTest {
         Set<Path> javaSources = new HashSet<>();
         JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
         StandardJavaFileManager mgr = compiler.getStandardFileManager(new DL(), Locale.US, UTF_8);
-        mgr.setLocationFromPaths(StandardLocation.SOURCE_PATH, Collections.singleton(dir));
-        mgr.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, Collections.singleton(dir));
+        mgr.setLocation(StandardLocation.SOURCE_PATH, Collections.singleton(dir.toFile()));
+        mgr.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singleton(dir.toFile()));
+        // JDK 11:
+//        mgr.setLocationFromPaths(StandardLocation.SOURCE_PATH, Collections.singleton(dir));
+//        mgr.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, Collections.singleton(dir));
         Set<JavaFileObject> fos = new HashSet<>();
         generateClasses(cb -> {
             Path file = pkgDir.resolve(cb.className() + ".java");
