@@ -152,6 +152,16 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
         return addPredicate(namedPredicate("is-subtype=" + type, TypeMirrorComparison.IS_SUBTYPE.predicate(toTypeMirror(type), utils, this::maybeFail)));
     }
 
+    public TypeMirrorTestBuilder<T> isAssignableWithErasure(String type) {
+        return addPredicate(namedPredicate("is-assignable-with-erasure=" + type,
+                TypeMirrorComparison.IS_ERASURE_ASSIGNABLE.predicate(toTypeMirror(type), utils, this::maybeFail)));
+    }
+
+    public TypeMirrorTestBuilder<T> isSubtypeWithErasure(String type) {
+        return addPredicate(namedPredicate("is-subtype-with-erasure=" + type,
+                TypeMirrorComparison.IS_ERASURE_SUBTYPE.predicate(toTypeMirror(type), utils, this::maybeFail)));
+    }
+
     public TypeMirrorTestBuilder<T> isSupertype(String type) {
         return addPredicate(namedPredicate("is-supertype=" + type, TypeMirrorComparison.IS_SUPERTYPE.predicate(toTypeMirror(type), utils, this::maybeFail)));
     }
@@ -181,7 +191,7 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
             return maybeFail(kind == m.getKind(), "Type kind of " + m + " must be " + kind + " but is " + m.getKind());
         }));
     }
-    
+
     private TypeElement toTypeElement(TypeMirror mir) {
         if (mir instanceof DeclaredType) {
             Element e = ((DeclaredType) mir).asElement();
@@ -194,8 +204,8 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
 
     public TypeElementTestBuilder<TypeMirrorTestBuilder<T>, ? extends TypeElementTestBuilder<TypeMirrorTestBuilder<T>, ?>> asElement() {
         return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
-            return addPredicate(this::toTypeElement, tetb._predicate());
-        });
+                    return addPredicate(this::toTypeElement, tetb._predicate());
+                });
     }
 
     public TypeMirrorTestBuilder<T> nestingKindMustBe(NestingKind kind) {
@@ -217,25 +227,25 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
     }
 
     public TypeMirrorTestBuilder<TypeMirrorTestBuilder<T>> testTypeParameterOfSupertypeOrInterface(String supertypeOrInterface, int typeParameter) {
-        return(TypeMirrorTestBuilder /* JDK 8 javac compatibility */)  new TypeMirrorTestBuilder<>(utils, tmtb -> {
-            typeKindMustBe(TypeKind.DECLARED);
-            return addPredicate(() -> "type-parameter-" + typeParameter + "-of-supertype-or-interface:" + tmtb._predicate().name(), m -> {
-                TypeMirror sup = findSupertypeOrInterfaceOfType(m, supertypeOrInterface);
-                if (sup == null) {
-                    return fail("No supertype or interface type matching " + supertypeOrInterface + " on " + m);
-                }
-                if (sup.getKind() != TypeKind.DECLARED) {
-                    return fail("Not a declared type: " + sup);
-                }
-                DeclaredType t = (DeclaredType) sup;
-                List<? extends TypeMirror> args = t.getTypeArguments();
-                if (args == null || args.size() < typeParameter) {
-                    return fail("No type argument for index " + typeParameter
-                            + " on " + t);
-                }
-                return tmtb.predicate().test(args.get(typeParameter));
-            });
-        });
+        return (TypeMirrorTestBuilder /* JDK 8 javac compatibility */) new TypeMirrorTestBuilder<>(utils, tmtb -> {
+                    typeKindMustBe(TypeKind.DECLARED);
+                    return addPredicate(() -> "type-parameter-" + typeParameter + "-of-supertype-or-interface:" + tmtb._predicate().name(), m -> {
+                        TypeMirror sup = findSupertypeOrInterfaceOfType(m, supertypeOrInterface);
+                        if (sup == null) {
+                            return fail("No supertype or interface type matching " + supertypeOrInterface + " on " + m);
+                        }
+                        if (sup.getKind() != TypeKind.DECLARED) {
+                            return fail("Not a declared type: " + sup);
+                        }
+                        DeclaredType t = (DeclaredType) sup;
+                        List<? extends TypeMirror> args = t.getTypeArguments();
+                        if (args == null || args.size() < typeParameter) {
+                            return fail("No type argument for index " + typeParameter
+                                    + " on " + t);
+                        }
+                        return tmtb.predicate().test(args.get(typeParameter));
+                    });
+                });
     }
 
     public TypeMirrorTestBuilder<TypeMirrorTestBuilder<T>> testSupertypeOrInterface(String supertypeOrInterface) {

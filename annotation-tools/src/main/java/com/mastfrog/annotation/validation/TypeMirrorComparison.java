@@ -15,7 +15,8 @@ import com.mastfrog.annotation.AnnotationUtils;
  * @author Tim Boudreau
  */
 enum TypeMirrorComparison {
-    EXACT_MATCH, SAME_TYPE, IS_SUBTYPE, IS_SUPERTYPE, IS_ASSIGNABLE,
+    EXACT_MATCH, SAME_TYPE, IS_SUBTYPE, IS_ERASURE_SUBTYPE,
+    IS_SUPERTYPE, IS_ASSIGNABLE, IS_ERASURE_ASSIGNABLE,
     IS_SUBSIGNATURE, IS_SUPERSIGNATURE;
 
     private <V> Supplier<TypeMirror> lazyTypeMirrorSupplier(V v, Function<V, TypeMirror> convert, BiFunction<Boolean, String, Boolean> b) {
@@ -77,8 +78,16 @@ enum TypeMirrorComparison {
                         result = b.apply(types.isAssignable(t, u), t
                                 + " is not assignable as " + u);
                         break;
+                    case IS_ERASURE_ASSIGNABLE:
+                        result = b.apply(types.isAssignable(utils.erasureOf(t), utils.erasureOf(u)), t
+                                + " is not assignable as " + u);
+                        break;
                     case IS_SUBTYPE:
                         result = b.apply(types.isSubtype(t, u), t
+                                + " is not a subtype of " + u);
+                        break;
+                    case IS_ERASURE_SUBTYPE:
+                        result = b.apply(types.isSubtype(utils.erasureOf(u), utils.erasureOf(t)), t
                                 + " is not a subtype of " + u);
                         break;
                     case IS_SUPERTYPE:

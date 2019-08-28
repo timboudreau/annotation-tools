@@ -1466,7 +1466,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             AnnotationBuilder<MethodBuilder<T>> bldr = annotatedWith(annotationType, built);
             c.accept(bldr);
             if (!built[0]) {
-                throw new IllegalStateException("closeAnnotation() not called");
+                bldr.closeAnnotation();
             }
             return this;
         }
@@ -6340,7 +6340,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             AnnotationBuilder<?> ab = annotatedWith(anno, built);
             c.accept(ab);
             if (!built[0]) {
-                throw new IllegalStateException("closeAnnotation() not called");
+                ab.closeAnnotation();
             }
             return this;
         }
