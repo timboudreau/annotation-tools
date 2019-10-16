@@ -36,6 +36,28 @@ import org.junit.jupiter.api.Test;
 public class TypeDerivationTest {
 
     @Test
+    public void testBug1() {
+        String sig = "ResolutionConsumer<GrammarSource<?>,NamedSemanticRegions<RuleTypes>,RuleTypes,X>";
+        GenericTypeVisitor v = new GenericTypeVisitor();
+        ClassBuilder.visitGenericTypes(sig, 0, v);
+
+        BodyBuilder bb = v.result();
+        LinesBuilder lb = new LinesBuilder();
+        bb.buildInto(lb);
+
+        String g = lb.toString();
+
+        List<String> expected = parts(sig);
+
+        System.out.println("EXP: " + expected);
+
+        List<String> got = parts(g);
+
+        assertEquals(expected, got);
+
+    }
+
+    @Test
     public void testTypesNotLost() {
         String nm = "ThrowingTriFunction<MessageId, ? super T, ThrowingBiConsumer<Throwable, Acknowledgement>, Acknowledgement>";
 
@@ -72,7 +94,6 @@ public class TypeDerivationTest {
         System.out.println("G IS '" + g + "'");
         assertFalse(g.trim().endsWith(","), g);
     }
-
 
     private List<String> parts(String nm) {
         String[] expectedParts = nm.split("[<>,]");

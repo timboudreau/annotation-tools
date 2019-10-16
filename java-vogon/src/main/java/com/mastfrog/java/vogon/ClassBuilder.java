@@ -1535,7 +1535,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public T bodyReturning(String body) {
-            return body(new boolean[1]).returning(body).endBlock();
+            return body().returning(body).endBlock();
         }
 
         private BlockBuilder<T> body(boolean[] built) {
@@ -1853,10 +1853,28 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
+    private static int closingBracketOf(int ix, String in) {
+        int openCount = 0;
+        for (int i = ix + 1; i < in.length(); i++) {
+            if (in.charAt(i) == '<') {
+                openCount++;
+            }
+            if (in.charAt(i) == '>' && openCount == 0) {
+                return i;
+            } else if (in.charAt(i) == '>') {
+                openCount--;
+            }
+        }
+        return -1;
+    }
+
     static void visitGenericTypes(String typeName, int depth, BiConsumer<Integer, String> c) {
         typeName = typeName.trim();
         int start = typeName.indexOf('<');
-        int end = typeName.lastIndexOf('>');
+        if (start < 0 && typeName.indexOf('>') >= 0) {
+            throw new IllegalArgumentException("Unbalanced <>'s in " + typeName);
+        }
+        int end = closingBracketOf(start, typeName);
         if (start < 0 != end < 0) {
             throw new IllegalArgumentException("Unbalanced <>'s in " + typeName);
         }

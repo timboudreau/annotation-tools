@@ -55,7 +55,10 @@ public final class AnnotationUtils {
     public static final String AU_LOG = "annoLog";
     private boolean log;
     private String logName;
-    private static final Set<AnnotationUtils> INSTANCES = CollectionUtils.weakSet();
+    // This must be synchronized or we can wind up in an endless loop inside
+    // WeakHashMap.put()
+    private static final Set<AnnotationUtils> INSTANCES 
+            = Collections.synchronizedSet(CollectionUtils.weakSet());
 
     @SuppressWarnings("LeakingThisInConstructor")
     public AnnotationUtils(ProcessingEnvironment processingEnv, Set<String> supportedAnnotationTypes, Class<?> processorClass) {
