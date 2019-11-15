@@ -101,9 +101,28 @@ public class ClassBuilderTest {
                     .invoke("println").withStringLiteral("It is time").on("System.out")
                     .orElse(elseBlock -> {
                         elseBlock.invoke("println").withStringLiteral("No dice")
-                                .on("System.out");
+                                .onField("out").of("System");
                     }).endBlock();
         });
+        System.out.println(cb);
+    }
+
+    @Test
+    public void testInvocationWithNewArgBuilders() {
+        ClassBuilder<String> cb = ClassBuilder.forPackage("com.foo").named("whatever")
+                .method("foo").body(bb -> {
+                    bb.invoke("thing", ib -> {
+                        ib.withStringConcatentationArgument("called ").with().field("hey").ofThis()
+                                .with().literal(" and then there is \"quoted\" stuff ")
+                                .with().invoke("currentTimeMillis").on("System")
+                                .endConcatenation().onThis();
+                                ;
+                    });
+                    bb.invoke("doSomething").withArgument().field("hey").ofThis()
+                            .withArgument(23).onField("hey").ofNew(nb -> {
+                                nb.ofType("Thingamabob");
+                            });
+                });
 
         System.out.println(cb.build());
     }

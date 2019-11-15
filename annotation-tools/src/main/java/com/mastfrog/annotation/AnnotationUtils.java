@@ -57,7 +57,7 @@ public final class AnnotationUtils {
     private String logName;
     // This must be synchronized or we can wind up in an endless loop inside
     // WeakHashMap.put()
-    private static final Set<AnnotationUtils> INSTANCES 
+    private static final Set<AnnotationUtils> INSTANCES
             = Collections.synchronizedSet(CollectionUtils.weakSet());
 
     @SuppressWarnings("LeakingThisInConstructor")
@@ -465,8 +465,8 @@ public final class AnnotationUtils {
      * an array by returning a one-element list.
      * <p>
      * <b>Note</b> - even if you are expecting a single Class object and the
-     * annotation does not return an array, if the user happened to write
-     * an array declaration, you will find more than one type here.
+     * annotation does not return an array, if the user happened to write an
+     * array declaration, you will find more than one type here.
      * </p>
      *
      * @param mirror An annotation mirror
@@ -489,14 +489,15 @@ public final class AnnotationUtils {
      * an array by returning a one-element list.
      * <p>
      * <b>Note</b> - even if you are expecting a single Class object and the
-     * annotation does not return an array, if the user happened to write
-     * an array declaration, you will find more than one type here.
+     * annotation does not return an array, if the user happened to write an
+     * array declaration, you will find more than one type here.
      * </p>
      * <p>
      * This overload will not fail the build if a type cannot be loaded, but
      * will pass such messages to the string consumer for deferred error
      * handling.
      * </p>
+     *
      * @param mirror The annotation mirror
      * @param param The name of the annotation method you expect to return a
      * <code>Class</code> or <code>Class[]</code>
@@ -1219,14 +1220,28 @@ public final class AnnotationUtils {
         return null;
     }
 
+    private static boolean isTypeKind(ElementKind kind) {
+        switch(kind) {
+            case CLASS :
+            case INTERFACE:
+            case ENUM :
+            case ANNOTATION_TYPE :
+                return true;
+            default :
+                return false;
+        }
+    }
+
     public static TypeElement enclosingType(Element el) {
         if (el == null) {
             return null;
         }
         do {
             el = el.getEnclosingElement();
-        } while (el != null && el.getKind() != ElementKind.CLASS);
-        return el.getKind() == ElementKind.CLASS ? (TypeElement) el : null;
+        } while (el != null
+                && !isTypeKind(el.getKind()));
+
+        return el != null && isTypeKind(el.getKind()) ? (TypeElement) el : null;
     }
 
     public static TypeMirror topLevelTypeAsTypeMirror(Element el) {
@@ -1259,7 +1274,7 @@ public final class AnnotationUtils {
         // XXX the line below compiles fine on JDK 9 but not on JDK 8, and we
         // are still targetting JDK 8.  Compiler bug?  Better inferencing in 9?
 //        return new AnnotationMirrorTestBuilder<>(this, amtb -> amtb.predicate());
-        return new AnnotationMirrorTestBuilder(this, amtb -> ((AnnotationMirrorTestBuilder)amtb).predicate());
+        return new AnnotationMirrorTestBuilder(this, amtb -> ((AnnotationMirrorTestBuilder) amtb).predicate());
     }
 
     public MultiAnnotationTestBuilder multiAnnotations() {
