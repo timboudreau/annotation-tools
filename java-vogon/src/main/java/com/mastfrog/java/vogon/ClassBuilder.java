@@ -393,7 +393,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         BlockBuilder<ClassBuilder<T>> block = staticBlock(built);
         c.accept(block);
         if (!built[0]) {
-            throw new IllegalStateException("endBlock not called on static block - will not be added");
+            block.endBlock();
         }
         return this;
     }
@@ -5108,9 +5108,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             c.accept(sw);
             if (!built[0]) {
                 if (!sw.isEmpty()) {
-                    statements.add(sw);
+                    sw.build();
                 } else {
-                    throw new IllegalStateException("Switch builder never used");
+                    throw new IllegalStateException("Switch builder never added "
+                            + "to and never closed");
                 }
             }
             return cast();
