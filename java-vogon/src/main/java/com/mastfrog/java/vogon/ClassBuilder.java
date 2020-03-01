@@ -2562,6 +2562,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return cast();
         }
 
+        public B withArgument(char arg) {
+            arguments.add(new Adhoc(LinesBuilder.escapeCharLiteral(arg)));
+            return cast();
+        }
+
+
         public B withArgument(String arg) {
             arguments.add(new Adhoc(arg));
             return cast();
