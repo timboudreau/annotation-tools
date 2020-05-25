@@ -7,6 +7,9 @@ import javax.lang.model.element.Element;
 import com.mastfrog.java.vogon.ClassBuilder;
 import com.mastfrog.annotation.AnnotationUtils;
 import com.mastfrog.function.throwing.io.IOBiConsumer;
+import com.mastfrog.function.throwing.io.IOConsumer;
+import com.mastfrog.util.preconditions.Exceptions;
+import java.io.IOException;
 import org.openide.filesystems.annotations.LayerBuilder;
 
 /**
@@ -33,5 +36,15 @@ public abstract class LayerGeneratingDelegate extends Delegate {
 
     protected final void addLayerTask(LayerTask task, Element... elements) {
         layerTaskAdder.accept(task, elements);
+    }
+
+    protected final void withLayer(IOConsumer<LayerBuilder> c, Element... elements) throws IOException {
+        try {
+            LayerBuilder lb = layer(elements);
+            c.accept(lb);
+        } catch (Exception ioe) {
+            ioe.printStackTrace(System.err);
+            Exceptions.chuck(ioe);
+        }
     }
 }
