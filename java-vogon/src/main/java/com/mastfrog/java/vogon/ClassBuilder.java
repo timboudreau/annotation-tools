@@ -70,6 +70,38 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
+    /**
+     * Static-import a variable defined in this type (usually for use in an
+     * annotation).
+     *
+     * @param importName An unqualified name of a field that exist or will be
+     * defined for this class
+     * @return this
+     */
+    public ClassBuilder<T> importStaticFromSelf(String importName) {
+        String fqn = fqn();
+        staticImport(fqn + "." + importName);
+        return this;
+    }
+
+    /**
+     * Static-import a variable defined in this type (usually for use in an
+     * annotation, or which reference inner enum types).
+     *
+     * @param importName An unqualified name of a field that exist or will be
+     * defined for this class
+     * @param next Additional names to import
+     * @return this
+     */
+    public ClassBuilder<T> importStaticFromSelf(String firstImport, String... next) {
+        String fqn = fqn();
+        staticImport(fqn + "." + firstImport);
+        for (String name : next) {
+            staticImport(fqn + "." + name);
+        }
+        return this;
+    }
+
     String methodSource(String name) { // for tests
         for (BodyBuilder bb : members) {
             if (bb instanceof MethodBuilder<?>) {
@@ -84,6 +116,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return "<did not find method '" + name + "'>";
     }
 
+    /**
+     * Add an annotation method (no body, default defined at end).
+     *
+     * @param method The method name
+     * @return a builder
+     */
     public AnnotationMethodBuilder<ClassBuilder<T>> annotationMethod(String method) {
         return new AnnotationMethodBuilder<>(amb -> {
             members.add(amb);
@@ -91,6 +129,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }, method);
     }
 
+    /**
+     * Add type parameters to this type.
+     *
+     * @param first The first type parameter
+     * @param more Additional type parameters
+     * @return this
+     */
     public ClassBuilder<T> withTypeParameters(String first, String... more) {
         typeParams.add(first);
         typeParams.addAll(Arrays.asList(more));
@@ -327,6 +372,18 @@ public final class ClassBuilder<T> implements BodyBuilder {
         });
     }
 
+    public ClassBuilder<T> enumConstants(Consumer<EnumConstantBuilder<?>> c) {
+        Holder<ClassBuilder<T>> holder = new Holder<>();
+        EnumConstantBuilder<Void> result = new EnumConstantBuilder<>(ecb -> {
+            holder.set(this);
+            return null;
+        });
+        if (!holder.isSet()) {
+            result.endEnumConstants();
+        }
+        return holder.get();
+    }
+
     public BlockBuilder<ClassBuilder<T>> staticBlock() {
         return staticBlock(new boolean[1]);
     }
@@ -336,7 +393,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         BlockBuilder<ClassBuilder<T>> block = staticBlock(built);
         c.accept(block);
         if (!built[0]) {
-            throw new IllegalStateException("endBlock not called on static block - will not be added");
+            block.endBlock();
         }
         return this;
     }
@@ -399,6 +456,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         private final Function<EnumConstantBuilder<T>, T> converter;
         private final Set<BodyBuilder> constants = new LinkedHashSet<>();
+        private String docComment;
 
         EnumConstantBuilder(Function<EnumConstantBuilder<T>, T> converter) {
             this.converter = converter;
@@ -407,6 +465,27 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public EnumConstantBuilder<T> add(String name) {
             constants.add(new Adhoc(name));
             return this;
+        }
+
+        public EnumConstantBuilder<T> docComment(String cmt) {
+            if (this.docComment != null) {
+                this.docComment += "\n" + cmt;
+            } else {
+                this.docComment = cmt;
+            }
+            return this;
+        }
+
+        public EnumConstantBuilder<T> addWithArgs(String name, Consumer<EnumConstantBuilder<T>> c) {
+            Holder<EnumConstantBuilder<T>> h = new Holder<>();
+            InvocationBuilder<Void> iv = new InvocationBuilder<Void>(ib -> {
+                h.set(this);
+                return null;
+            }, name);
+            if (!h.isSet()) {
+                iv.inScope();
+            }
+            return h.get();
         }
 
         public InvocationBuilder<EnumConstantBuilder<T>> addWithArgs(String name) {
@@ -422,12 +501,18 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         @Override
         public void buildInto(LinesBuilder lines) {
+            if (docComment != null) {
+                writeDocComment(docComment, lines);
+            }
             Iterator<BodyBuilder> it = constants.iterator();
             while (it.hasNext()) {
                 BodyBuilder bb = it.next();
                 bb.buildInto(lines);
                 if (it.hasNext()) {
                     lines.appendRaw(",");
+                }
+                if (!(bb instanceof EnumConstantBuilder<?>)) {
+                    lines.onNewLine();
                 }
             }
             lines.appendRaw(";");
@@ -1012,13 +1097,47 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return result;
     }
 
+    /**
+     * Perform some action (perhaps adding fields or methods) iteratively for
+     * each item in the passed iterable).
+     *
+     * @param <R> The item type
+     * @param items The collection of items
+     * @param c A consumer
+     * @return this
+     */
+    public <R> ClassBuilder<T> iteratively(Iterable<R> items, BiConsumer<? super ClassBuilder<?>, ? super R> c) {
+        notNull("c", c);
+        if (items != null) {
+            for (R item : items) {
+                c.accept(this, item);
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Perform some operation on this class builder conditionally, if the passed
+     * value is true. Also provides a way to get a reference to the current
+     * clcass builder in a chained set of method calls.
+     *
+     * @param test The test
+     * @param c A consumer that is passed this class builder
+     * @return A class builder
+     */
     public ClassBuilder<T> conditionally(boolean test, Consumer<? super ClassBuilder<?>> c) {
+        notNull("c", c);
         if (test) {
             c.accept(this);
         }
         return this;
     }
 
+    /**
+     * A builder for a usage of a field.
+     *
+     * @param <T> The return type when built
+     */
     public static final class FieldReferenceBuilder<T> implements BodyBuilder {
 
         private final String name;
@@ -1091,6 +1210,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
+    /**
+     * Builder for annotation methods - similar to the regular method builder,
+     * without bodies.
+     *
+     * @param <T>
+     */
     public static final class AnnotationMethodBuilder<T> implements BodyBuilder {
 
         private final Function<? super AnnotationMethodBuilder<T>, T> converter;
@@ -1098,7 +1223,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private BodyBuilder defaultValue;
         private BodyBuilder type;
 
-        public AnnotationMethodBuilder(Function<? super AnnotationMethodBuilder<T>, T> converter, String name) {
+        AnnotationMethodBuilder(Function<? super AnnotationMethodBuilder<T>, T> converter, String name) {
             this.converter = converter;
             this.name = checkIdentifier(notNull("name", name));
         }
@@ -1347,6 +1472,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
+    /**
+     * Builder for a method - conclude it by calling its body() method, and
+     * building that.
+     *
+     * @param <T> The type it builds
+     */
     public static final class MethodBuilder<T> implements BodyBuilder {
 
         private final Function<MethodBuilder<T>, T> converter;
@@ -2241,9 +2372,35 @@ public final class ClassBuilder<T> implements BodyBuilder {
             super(converter, name, false);
         }
 
+        @Override
+        public String toString() {
+            LinesBuilder lb = new LinesBuilder(4);
+            buildInto(lb);
+            return lb.toString();
+        }
+
         public T on(String what) {
             this.on = new Adhoc(what);
             return converter.apply(cast());
+        }
+
+        public FieldReferenceBuilder<T> onField(String field) {
+            FieldReferenceBuilder<T> result = new FieldReferenceBuilder<T>(field, frb -> {
+                this.on = frb;
+                return converter.apply(cast());
+            });
+            return result;
+        }
+
+        public T onField(String field, Consumer<FieldReferenceBuilder<?>> c) {
+            Holder<T> holder = new Holder<T>();
+            FieldReferenceBuilder<Void> result = new FieldReferenceBuilder<Void>(field, frb -> {
+                this.on = frb;
+                holder.set(converter.apply(cast()));
+                return null;
+            });
+            c.accept(result);
+            return holder.get(result::ofThis);
         }
 
         public InvocationBuilder<T> onInvocationOf(String methodName) {
@@ -2405,8 +2562,19 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return cast();
         }
 
+        public B withArgument(char arg) {
+            arguments.add(new Adhoc(LinesBuilder.escapeCharLiteral(arg)));
+            return cast();
+        }
+
+
         public B withArgument(String arg) {
             arguments.add(new Adhoc(arg));
+            return cast();
+        }
+
+        public B withClassArgument(String arg) {
+            arguments.add(new Adhoc(arg + ".class"));
             return cast();
         }
 
@@ -2443,6 +2611,43 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 result.inScope();
             }
             return holder.get("Invocation builder not completed");
+        }
+
+        public B withArgument(Consumer<ValueExpressionBuilder<?>> consumer) {
+            Holder<B> holder = new Holder<>();
+            ValueExpressionBuilder<Void> result = new ValueExpressionBuilder<>(veb -> {
+                arguments.add(veb);
+                return null;
+            });
+            consumer.accept(result);
+            return holder.get("Value expression not closed");
+        }
+
+        public ValueExpressionBuilder<B> withArgument() {
+            ValueExpressionBuilder<B> result = new ValueExpressionBuilder<>(veb -> {
+                arguments.add(veb);
+                return cast();
+            });
+            return result;
+        }
+
+        public StringConcatenationBuilder<B> withStringConcatentationArgument(String initialLiteral) {
+            StringConcatenationBuilder<B> sb = new StringConcatenationBuilder<B>(new Adhoc(LinesBuilder.stringLiteral(initialLiteral)), scb -> {
+                arguments.add(scb);
+                return cast();
+            });
+            return sb;
+        }
+
+        public B withStringConcatentationArgument(String initialLiteral, Consumer<StringConcatenationBuilder<?>> c) {
+            Holder<B> holder = new Holder<>();
+            StringConcatenationBuilder<Void> sb = new StringConcatenationBuilder<>(new Adhoc(LinesBuilder.stringLiteral(initialLiteral)), scb -> {
+                arguments.add(scb);
+                holder.set(cast());
+                return null;
+            });
+            c.accept(sb);
+            return holder.get(sb::endConcatenation);
         }
 
         public NumericOrBitwiseExpressionBuilder<B> withNumericExpressionArgument(int literal) {
@@ -4822,6 +5027,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return cast();
         }
 
+        public B returningNull() {
+            return returning("null");
+        }
+
         public B returning(Number num) {
             statements.add(new ReturnStatement(friendlyNumber(num)));
             return cast();
@@ -4905,9 +5114,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             c.accept(sw);
             if (!built[0]) {
                 if (!sw.isEmpty()) {
-                    statements.add(sw);
+                    sw.build();
                 } else {
-                    throw new IllegalStateException("Switch builder never used");
+                    throw new IllegalStateException("Switch builder never added "
+                            + "to and never closed");
                 }
             }
             return cast();
@@ -6038,13 +6248,16 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public ArrayValueBuilder<T> annotation(String type, Consumer<? super AnnotationBuilder<?>> c) {
-            boolean[] built = new boolean[1];
-            AnnotationBuilder<?> bldr = annotation(type, built);
-            c.accept(bldr);
-            if (built[0] == false) {
-                throw new IllegalStateException("Annotation was not closed - call closeAnnotation()");
+            Holder<ArrayValueBuilder<T>> h = new Holder<>();
+            AnnotationBuilder<Void> ab = new AnnotationBuilder<>(b -> {
+                values.add(b);
+                h.set(ArrayValueBuilder.this);
+                return null;
+            }, type);
+            if (!h.isSet()) {
+                ab.closeAnnotation();
             }
-            return this;
+            return h.get();
         }
 
         private AnnotationBuilder<ArrayValueBuilder<T>> annotation(String type, boolean[] built) {
@@ -6103,7 +6316,6 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }
             return true;
         }
-
     }
 
     public static final class AnnotationBuilder<T> implements BodyBuilder {
@@ -6115,6 +6327,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
         AnnotationBuilder(Function<AnnotationBuilder<T>, T> converter, String annotationType) {
             this.converter = converter;
             this.annotationType = annotationType;
+        }
+
+        @Override
+        public String toString() {
+            LinesBuilder lb = new LinesBuilder();
+            this.buildInto(lb);
+            return lb.toString();
         }
 
         public AnnotationBuilder<T> addArrayArgument(String name, Consumer<? super ArrayValueBuilder<?>> c) {
@@ -6593,6 +6812,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         boolean isSet() {
             return obj != null || wasSetCalled;
+        }
+
+        T get(Runnable ifNull) {
+            if (!isSet()) {
+                ifNull.run();
+            }
+            return obj;
         }
 
         T get(String nullMessage) {
