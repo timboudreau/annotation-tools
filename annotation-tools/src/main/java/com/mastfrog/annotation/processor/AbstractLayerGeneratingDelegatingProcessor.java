@@ -29,6 +29,7 @@ import com.mastfrog.java.vogon.ClassBuilder;
 import org.openide.filesystems.annotations.LayerBuilder;
 import org.openide.filesystems.annotations.LayerGeneratingProcessor;
 import com.mastfrog.annotation.validation.AbstractPredicateBuilder;
+import com.mastfrog.util.preconditions.Exceptions;
 
 /**
  *
@@ -84,10 +85,33 @@ public abstract class AbstractLayerGeneratingDelegatingProcessor extends LayerGe
         utils = new AnnotationUtils(processingEnv, getSupportedAnnotationTypes(), getClass());
         super.init(processingEnv);
         installDelegates(delegates);
-        delegates.init(processingEnv, utils, this::writeOne, this::layer, this::addLayerTask);
+        delegates.init(processingEnv, utils, this::writeOne, this::getLayerBuilder, this::addLayerTask);
         onInit(processingEnv, utils);
         used.clear();
 //        System.out.println(getClass().getSimpleName() + " DELEGATES: \n" + delegates);
+    }
+
+    private LayerBuilder getLayerBuilder(Element... elements) {
+        try {
+            // With multiple nested delegates, we can wind up trying to
+            // *read* the generated layer file twice - so instead we need
+            // to cache the first layer builder created, and reuse that
+            // until processing is over for this round (at which point the
+            // superclass will write it)
+            if (cachedLayerBuilder != null) {
+                return cachedLayerBuilder;
+            }
+            return layer(elements);
+        } catch (Exception ex) {
+            ex.printStackTrace(System.err);
+            utils.fail("Exception fetching layer builder");
+            return Exceptions.chuck(ex);
+        }
+    }
+    private LayerBuilder cachedLayerBuilder;
+
+    private void discardCachedLayerBuilder() {
+        cachedLayerBuilder = null;
     }
 
     protected void onInit(ProcessingEnvironment env, AnnotationUtils utils) {
@@ -119,102 +143,100 @@ public abstract class AbstractLayerGeneratingDelegatingProcessor extends LayerGe
     @Override
     public final boolean handleProcess(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         onBeforeHandleProcess(annotations, roundEnv);
-        try {
-            boolean done = true;
-            Map<AnnotationMirror, Element> elementForAnnotation = new HashMap<>();
+        boolean done = true;
+        Map<AnnotationMirror, Element> elementForAnnotation = new HashMap<>();
 //            System.out.println(getClass().getSimpleName() + " ANNOTATIONS ORDER: ");
 //            for (String anno : getSupportedAnnotationTypes()) {
 //                System.out.println("    " + simpleName(anno));
 //            }
-            for (String annotationClass : getSupportedAnnotationTypes()) {
-                Set<Element> annotated = utils().findAnnotatedElements(roundEnv, Collections.singleton(annotationClass));
+        for (String annotationClass : getSupportedAnnotationTypes()) {
+            Set<Element> annotated = utils().findAnnotatedElements(roundEnv, Collections.singleton(annotationClass));
 //                if (!annotated.isEmpty()) {
 //                    System.out.println("  ELEMENTS ORDER FOR " + simpleName(annotationClass) + ": ");
 //                    for (Element e : annotated) {
 //                        System.out.println("    " + e);
 //                    }
 //                }
-                for (Element el : annotated) {
-                    AnnotationMirror mirror = utils().findAnnotationMirror(el, annotationClass);
-                    if (mirror == null) {
-                        continue;
-                    }
-                    utils().log("Mirror {0} on kind {1} by {2} with {3}", mirror, el.getKind(), getClass().getSimpleName(), delegates);
-                    if (!_validateAnnotationMirror(mirror, el.getKind(), el)) {
-                        continue;
-                    }
-                    boolean ok = false;
-                    switch (el.getKind()) {
-                        case CONSTRUCTOR:
+            for (Element el : annotated) {
+                AnnotationMirror mirror = utils().findAnnotationMirror(el, annotationClass);
+                if (mirror == null) {
+                    continue;
+                }
+                utils().log("Mirror {0} on kind {1} by {2} with {3}", mirror, el.getKind(), getClass().getSimpleName(), delegates);
+                if (!_validateAnnotationMirror(mirror, el.getKind(), el)) {
+                    continue;
+                }
+                boolean ok = false;
+                switch (el.getKind()) {
+                    case CONSTRUCTOR:
                             try {
-                                ExecutableElement constructor = (ExecutableElement) el;
-                                done &= delegates.processConstructorAnnotation(constructor, mirror, roundEnv, used);
-                                done &= processConstructorAnnotation(constructor, mirror, roundEnv);
-                                ok = true;
-                            } catch (Exception ex) {
-                                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
-                                ex.printStackTrace();
-                            }
-                            break;
-                        case METHOD:
-                            try {
-                                ExecutableElement method = (ExecutableElement) el;
-                                done &= delegates.processMethodAnnotation(method, mirror, roundEnv, used);
-                                done &= processMethodAnnotation(method, mirror, roundEnv);
-                                ok = true;
-                            } catch (Exception ex) {
-                                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
-                                ex.printStackTrace();
-                            }
-                            break;
-                        case FIELD:
-                            try {
-                                VariableElement var = (VariableElement) el;
-                                done &= delegates.processFieldAnnotation(var, mirror, roundEnv, used);
-                                done &= processFieldAnnotation(var, mirror, roundEnv);
-                                ok = true;
-                            } catch (Exception ex) {
-                                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
-                                ex.printStackTrace();
-                            }
-                            break;
-                        case INTERFACE:
-                        case CLASS:
-                            try {
-                                TypeElement type = (TypeElement) el;
-                                done &= delegates.processTypeAnnotation(type, mirror, roundEnv, used);
-                                done &= processTypeAnnotation(type, mirror, roundEnv);
-                                ok = true;
-                            } catch (Exception ex) {
-                                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
-                                ex.printStackTrace();
-                            }
-                            break;
-                        default:
-                            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
-                                    "Not applicable to " + el.getKind() + ": " + mirror.getAnnotationType(), el);
+                        ExecutableElement constructor = (ExecutableElement) el;
+                        done &= delegates.processConstructorAnnotation(constructor, mirror, roundEnv, used);
+                        done &= processConstructorAnnotation(constructor, mirror, roundEnv);
+                        ok = true;
+                    } catch (Exception ex) {
+                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
+                                ex.printStackTrace(System.err);
                     }
-                    if (ok) {
-                        elementForAnnotation.put(mirror, el);
+                    break;
+                    case METHOD:
+                            try {
+                        ExecutableElement method = (ExecutableElement) el;
+                        done &= delegates.processMethodAnnotation(method, mirror, roundEnv, used);
+                        done &= processMethodAnnotation(method, mirror, roundEnv);
+                        ok = true;
+                    } catch (Exception ex) {
+                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
+                                ex.printStackTrace(System.err);
                     }
+                    break;
+                    case FIELD:
+                            try {
+                        VariableElement var = (VariableElement) el;
+                        done &= delegates.processFieldAnnotation(var, mirror, roundEnv, used);
+                        done &= processFieldAnnotation(var, mirror, roundEnv);
+                        ok = true;
+                    } catch (Exception ex) {
+                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
+                                ex.printStackTrace(System.err);
+                    }
+                    break;
+                    case INTERFACE:
+                    case CLASS:
+                            try {
+                        TypeElement type = (TypeElement) el;
+                        done &= delegates.processTypeAnnotation(type, mirror, roundEnv, used);
+                        done &= processTypeAnnotation(type, mirror, roundEnv);
+                        ok = true;
+                    } catch (Exception ex) {
+                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "IOException processing annotation " + annotationClass, el);
+                        ex.printStackTrace();
+                    }
+                    break;
+                    default:
+                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
+                                "Not applicable to " + el.getKind() + ": " + mirror.getAnnotationType(), el);
+                }
+                if (ok) {
+                    elementForAnnotation.put(mirror, el);
                 }
             }
-            try {
-                done &= onRoundCompleted(elementForAnnotation, roundEnv);
-                done &= delegates.onRoundCompleted(elementForAnnotation, roundEnv, used);
-            } catch (Exception ex) {
-                utils().logException(ex, true);
-                ex.printStackTrace(System.out);
-            }
-            return done;
-//            return false;
-        } finally {
-            try {
-                onAfterHandleProcess(annotations, roundEnv);
-            } finally {
-                runLayerTasks(roundEnv);
-            }
         }
+        try {
+            done &= onRoundCompleted(elementForAnnotation, roundEnv);
+            done &= delegates.onRoundCompleted(elementForAnnotation, roundEnv, used);
+        } catch (Exception ex) {
+            utils().logException(ex, true);
+            ex.printStackTrace(System.out);
+        }
+        onAfterHandleProcess(annotations, roundEnv);
+        if (done) {
+            runLayerTasks(roundEnv);
+        }
+        if (roundEnv.processingOver()) {
+            discardCachedLayerBuilder();
+        }
+        return done;
     }
 
     private void runLayerTasks(RoundEnvironment roundEnv) {
