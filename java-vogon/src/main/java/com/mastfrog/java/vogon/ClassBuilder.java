@@ -362,6 +362,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
     private EnumConstantBuilder<ClassBuilder<T>> constants;
 
+    public EnumConstantBuilder<ClassBuilder<T>> enumConstants(String first) {
+        return enumConstants().add(first);
+    }
+
     public EnumConstantBuilder<ClassBuilder<T>> enumConstants() {
         if (constants != null) {
             return constants;
@@ -374,11 +378,18 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
     public ClassBuilder<T> enumConstants(Consumer<EnumConstantBuilder<?>> c) {
         Holder<ClassBuilder<T>> holder = new Holder<>();
-        EnumConstantBuilder<Void> result = new EnumConstantBuilder<>(ecb -> {
+        EnumConstantBuilder<ClassBuilder<T>> result = new EnumConstantBuilder<>(ecb -> {
+            if (constants != null) {
+                constants.constants.addAll(ecb.constants);
+            } else {
+                constants = ecb;
+            }
             holder.set(this);
-            return null;
+            return this;
         });
+        c.accept(result);
         if (!holder.isSet()) {
+            toEnum();
             result.endEnumConstants();
         }
         return holder.get();
@@ -476,12 +487,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return this;
         }
 
-        public EnumConstantBuilder<T> addWithArgs(String name, Consumer<EnumConstantBuilder<T>> c) {
+        public EnumConstantBuilder<T> addWithArgs(String name, Consumer<InvocationBuilder<?>> c) {
             Holder<EnumConstantBuilder<T>> h = new Holder<>();
             InvocationBuilder<Void> iv = new InvocationBuilder<Void>(ib -> {
                 h.set(this);
+                constants.add(ib);
                 return null;
             }, name);
+            c.accept(iv);
             if (!h.isSet()) {
                 iv.inScope();
             }
@@ -2566,7 +2579,6 @@ public final class ClassBuilder<T> implements BodyBuilder {
             arguments.add(new Adhoc(LinesBuilder.escapeCharLiteral(arg)));
             return cast();
         }
-
 
         public B withArgument(String arg) {
             arguments.add(new Adhoc(arg));
@@ -6367,7 +6379,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             AnnotationBuilder<?> bldr = addAnnotationArgument(name, annotationType, built);
             c.accept(bldr);
             if (built[0] == false) {
-                throw new IllegalStateException("closeAnnotation not called");
+                bldr.closeAnnotation();
             }
             return this;
         }
