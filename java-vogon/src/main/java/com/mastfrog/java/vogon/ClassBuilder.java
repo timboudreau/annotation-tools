@@ -3002,6 +3002,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         final List<CatchBuilder<?>> catches = new ArrayList<>();
         private BodyBuilder finallyBlock;
+        private boolean tryBuilt;
+        private T buildResult;
 
         public TryBuilder(Function<? super BodyBuilder, T> converter) {
             super(converter, true);
@@ -3017,9 +3019,27 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 cb.buildInto(lines);
             }
             if (finallyBlock != null) {
+                lines.backup();
                 lines.word("finally ");
                 finallyBlock.buildInto(lines);
             }
+        }
+
+        @Override
+        protected T endBlock() {
+            // We can get built on each catch or finally, so
+            // ensure we're only added once to the containing block -
+            // if our contents are updated afterwards, that's fine
+            if (tryBuilt) {
+                return buildResult;
+            }
+            if (finallyBlock == null && catches.isEmpty()) {
+                throw new IllegalStateException("Try block does not have any "
+                        + "catch or finally blocks and will result in an uncompilable "
+                        + "source.");
+            }
+            tryBuilt = true;
+            return buildResult = super.endBlock();
         }
 
         public T catching(Consumer<? super CatchBuilder<?>> c, String type, String... moreTypes) {
@@ -3045,19 +3065,27 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public T fynalli(Consumer<? super BlockBuilder<?>> bb) {
+            if (finallyBlock != null) {
+                throw new IllegalStateException("Already have a finally block " + finallyBlock);
+            }
             Holder<T> h = new Holder<>();
             BlockBuilder<Void> result = new BlockBuilder<>(b -> {
-                h.set(endBlock());
+                finallyBlock = b;
+                T res = endBlock();
+                h.set(res);
                 return null;
             }, true);
             bb.accept(result);
             if (!h.isSet()) {
-                h.set(endBlock());
+                result.endBlock();
             }
-            return h.get();
+            return buildResult;
         }
 
         public BlockBuilder<T> fynalli() {
+            if (finallyBlock != null) {
+                throw new IllegalStateException("Already have a finally block " + finallyBlock);
+            }
             return new BlockBuilder<>(bb -> {
                 finallyBlock = bb;
                 return endBlock();
@@ -3082,9 +3110,30 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return endBlock();
         }
 
+        public CatchBuilder<T> log() {
+            return logException(exceptionName);
+        }
+
+        public CatchBuilder<T> logException(Level level) {
+            return logException(level, exceptionName);
+        }
+
+        public CatchBuilder<T> logExceptionWithMessage(String msg) {
+            return logException(Level.SEVERE, exceptionName, msg);
+        }
+
+        public CatchBuilder<T> logExceptionWithMessage(Level level, String msg) {
+            return logException(level, exceptionName, msg);
+        }
+
         public BlockBuilder<T> fynalli() {
             parent.catches.add(this);
             return parent.fynalli();
+        }
+
+        public T finalli(Consumer<BlockBuilder<?>> c) {
+            parent.catches.add(this);
+            return parent.fynalli(c);
         }
 
         public CatchBuilder<T> catching(String type, String... moreTypes) {
@@ -4609,11 +4658,81 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return s.substring(start);
         }
 
+        /**
+         * Add a println statement which will only be included in source if
+         * debug log statements was set enabled on the parent class builder
+         * before calling this method.
+         *
+         * @param line A string literal
+         * @return this
+         */
         public B debugLog(String line) {
             if ((CONTEXT.get() != null && CONTEXT.get().generateDebugCode)) {
                 invoke("println").withStringLiteral(line).on("System.out");
             }
             return cast();
+        }
+
+        /**
+         * Log an exception with the default level of
+         * java.util.logging.Level.SEVERE.
+         *
+         * @param exceptionName The name of the variable holding the exception
+         * @return this
+         */
+        public B logException(String exceptionName) {
+            return logException(Level.SEVERE, exceptionName, null);
+        }
+
+        /**
+         * Log an exception with the passed logging level and no message.
+         *
+         * @param level the logging level
+         * @param exceptionName The name of the variable holding the exception
+         * @return this
+         */
+        public B logException(Level level, String exceptionName) {
+            return logException(level, exceptionName, null);
+        }
+
+        /**
+         * Log an exception with the default level of
+         * java.util.logging.Level.SEVERE.
+         *
+         * @param exceptionName The name of the variable holding the exception
+         * @param msg The message to log with the exception
+         * @return this
+         */
+        public B logException(String exceptionName, String msg) {
+            return logException(Level.SEVERE, exceptionName, msg);
+        }
+
+        /**
+         * Log an exception.
+         *
+         * @param level The level
+         * @param exceptionName The variable name holding the exception instance
+         * @param msg The message
+         * @return this
+         */
+        public B logException(Level level, String exceptionName, String msg) {
+            ClassBuilder<?> ctx = CONTEXT.get();
+            if (ctx != null) {
+                ctx.logger();
+                ctx.importing(Level.class.getName());
+            }
+            if (exceptionName == null) {
+                exceptionName = "thrown";
+            }
+            InvocationBuilder<B> inv = invoke("log")
+                    .withArgument("Level." + level.getName());
+
+            if (msg == null) {
+                inv.withArgument("null");
+            } else {
+                inv.withStringLiteral(msg);
+            }
+            return inv.withArgument(exceptionName).on("LOGGER");
         }
 
         public B log(String line) {
@@ -4915,7 +5034,16 @@ public final class ClassBuilder<T> implements BodyBuilder {
             });
             cb.accept(tb);
             if (!done[0]) {
-                tb.fynalli().lineComment("do nothing").endBlock();
+                Exception ex = new Exception();
+                BlockBuilder<Void> fin = tb.fynalli();
+                fin.lineComment("Try builder did not have any catch or finally blocks added to it, so this");
+                fin.lineComment("empty catch block was generated.  This is probably a bug in your annotation");
+                fin.lineComment("processor");
+                fin.lineComment("");
+                for (StackTraceElement st : ex.getStackTrace()) {
+                    fin.lineComment("    " + st);
+                }
+                fin.endBlock();
                 assert done[0];
             }
             return cast();
