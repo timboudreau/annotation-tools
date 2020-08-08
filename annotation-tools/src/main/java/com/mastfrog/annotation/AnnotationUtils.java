@@ -834,15 +834,52 @@ public final class AnnotationUtils {
                             }
                         }
                     } else {
+                        AnnotationValue av = null;
                         try {
+                            if (x.getValue().getValue() instanceof AnnotationValue) {
+                                av = (AnnotationValue) x.getValue().getValue();
+                                if (av.getValue() instanceof List<?>) {
+                                    List<?> list = (List<?>) av.getValue();
+                                    for (Object o : list) {
+                                        if (o instanceof AnnotationValue) {
+                                            AnnotationValue av2 = (AnnotationValue) o;
+                                            try {
+                                                result = type.cast(av2.getValue());
+                                                break;
+                                            } catch (ClassCastException | AnnotationTypeMismatchException ex) {
+                                                ex.printStackTrace(System.out);
+                                                fail("Not an instance of " + type.getName() + " for value of "
+                                                        + param + " on " + mirror.getAnnotationType()
+                                                        + ", but was " + type.getName() + " - " + av2
+                                                        + " / " + (av2 == null ? null : av2.getValue())
+                                                        + ": " + ex.getMessage(), x.getKey());
+                                            }
+                                        } else {
+                                            result = type.cast(result);
+                                        }
+                                    }
+                                } else {
+                                    result = type.cast(av.getValue());
+                                }
+                            } else {
 //                            System.out.println("  try single cast");
-                            result = type.cast(x.getValue().getValue());
+                                result = type.cast(x.getValue().getValue());
+                            }
                         } catch (ClassCastException | AnnotationTypeMismatchException ex) {
+                            boolean failed = true;
+                            if ("<error>".equals(x.getValue().getValue())) {
+                                failed = true;
+                                fail("Erroneous annotation value for " + param);
+                            }
+                            System.out.println("Wrong type? " + x.getValue() + " / " + x.getValue().getValue());
                             ex.printStackTrace(System.out);
-                            fail("Not an instance of " + type.getName() + " for value of "
-                                    + param + " on " + mirror.getAnnotationType()
-                                    + ", but was " + type.getName()
-                                    + ": " + ex.getMessage(), x.getKey());
+                            if (!failed) {
+                                fail("Not an instance of " + type.getName() + " for value of "
+                                        + param + " on " + mirror.getAnnotationType()
+                                        + ", but was " + type.getName() + " - " + av
+                                        + " / " + x.getValue().getValue()
+                                        + ": " + ex.getMessage(), x.getKey());
+                            }
                         }
                     }
                 }
@@ -1221,13 +1258,13 @@ public final class AnnotationUtils {
     }
 
     private static boolean isTypeKind(ElementKind kind) {
-        switch(kind) {
-            case CLASS :
+        switch (kind) {
+            case CLASS:
             case INTERFACE:
-            case ENUM :
-            case ANNOTATION_TYPE :
+            case ENUM:
+            case ANNOTATION_TYPE:
                 return true;
-            default :
+            default:
                 return false;
         }
     }
