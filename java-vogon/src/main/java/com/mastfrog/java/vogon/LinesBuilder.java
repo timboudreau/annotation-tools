@@ -147,7 +147,7 @@ public class LinesBuilder {
     private String wrapPrefix;
 
     public char lastNonWhitespaceChar() {
-        int pos = sb.length()-1;
+        int pos = sb.length() - 1;
         while (pos >= 0) {
             char c = sb.charAt(pos);
             if (!Character.isWhitespace(c)) {
@@ -184,6 +184,7 @@ public class LinesBuilder {
     }
 
     private boolean hr;
+
     void hangingWrap(Consumer<LinesBuilder> c) {
         boolean old = hr;
         hr = true;
@@ -395,6 +396,7 @@ public class LinesBuilder {
     }
 
     private boolean inParens;
+
     public LinesBuilder parens(Consumer<LinesBuilder> c) {
         return delimit('(', ')', lb -> {
             boolean wasInParens = inParens;
@@ -424,10 +426,10 @@ public class LinesBuilder {
 
     public LinesBuilder commaDelimit(String... all) {
         for (int i = 0; i < all.length; i++) {
-            if (i != all.length - 1) {
-                sb.append(',');
-            }
             word(all[i]);
+            if (i != all.length - 1) {
+                sb.append(", ");
+            }
         }
         return this;
     }

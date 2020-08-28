@@ -453,6 +453,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 contents[i].buildInto(lines);
             }
         }
+
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            for (BodyBuilder bb : contents) {
+                sb.append(bb);
+            }
+            return sb.toString();
+        }
     }
 
     static final class Dnl implements BodyBuilder {
@@ -857,7 +865,16 @@ public final class ClassBuilder<T> implements BodyBuilder {
         if (typeParams.size() > 0) {
             lines.appendRaw("<");
             for (Iterator<String> it = typeParams.iterator(); it.hasNext();) {
-                lines.word(it.next());
+                String param = it.next();
+                if (param.indexOf(' ') > 0) {
+                    param = param.trim();
+                    String[] parts = param.split("\\s+");
+                    for (String p : parts) {
+                        lines.word(p);
+                    }
+                } else {
+                    lines.word(param);
+                }
                 if (it.hasNext()) {
                     lines.appendRaw(", ");
                 }
@@ -1163,9 +1180,20 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.converter = converter;
         }
 
+        T setFrom(FieldReferenceBuilder<?> other) {
+            referent = other.referent;
+            arrayElements.clear();
+            arrayElements.addAll(other.arrayElements);
+            return converter.apply(this);
+        }
+
         private T setReferent(BodyBuilder bb) {
             this.referent = bb;
             return converter.apply(this);
+        }
+
+        public String toString() {
+            return referent + "." + name;
         }
 
         public T of(String what) {
@@ -1174,6 +1202,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public T ofThis() {
             return of("this");
+        }
+
+        public FieldReferenceBuilder<T> ofField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return setReferent(frb);
+            });
         }
 
         public InvocationBuilder<T> ofInvocationOf(String name) {
@@ -1221,6 +1255,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 lines.backup().appendRaw("[" + index + "]");
             }
         }
+
     }
 
     /**
@@ -1485,6 +1520,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
+    private static String leadingToken(String typeParam) {
+        String[] result = typeParam.split("\\s+");
+        return result[0];
+    }
+
     /**
      * Builder for a method - conclude it by calling its body() method, and
      * building that.
@@ -1498,7 +1538,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private final Set<String> typeParams = new LinkedHashSet<>();
         private final Set<BodyBuilder> annotations = new LinkedHashSet<>();
         private final Set<BodyBuilder> throwing = new LinkedHashSet<>();
-        private BodyBuilder block;
+        private BlockBuilderBase block;
         private String type = "void";
         private final String name;
         private String docComment;
@@ -1533,8 +1573,26 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         private void addTypeParam(String tp) {
+            if (tp == null) {
+                throw new IllegalArgumentException("Null type param");
+            }
+            tp = tp.trim();
+            if (tp.length() == 0) {
+                throw new IllegalArgumentException("Empty type param");
+            }
+            String name = checkIdentifier(leadingToken(tp));
             if (typeParams.contains(tp)) {
-                throw new IllegalStateException("Already have a type parameter '" + tp + " - cannot be added twice");
+                throw new IllegalArgumentException("Already have a type parameter '" + tp + " - cannot be added twice");
+            }
+            if (!typeParams.isEmpty()) {
+                Set<String> names = new HashSet<>();
+                for (String t : typeParams) {
+                    if (leadingToken(t).equals(name)) {
+                        throw new IllegalArgumentException("Already have a type parameter named "
+                                + name + ": " + t + " - cannot add " + tp);
+                    }
+                }
+
             }
             typeParams.add(tp);
         }
@@ -1709,8 +1767,23 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 lines.word(m.toString());
             }
             if (!typeParams.isEmpty()) {
+//                    lb.commaDelimit(typeParams.toArray(new String[typeParams.size()]));
                 lines.delimit('<', '>', lb -> {
-                    lb.commaDelimit(typeParams.toArray(new String[typeParams.size()]));
+                    for (Iterator<String> it = typeParams.iterator(); it.hasNext();) {
+                        String param = it.next();
+                        if (param.indexOf(' ') > 0) {
+                            param = param.trim();
+                            String[] parts = param.split("\\s+");
+                            for (String p : parts) {
+                                lb.word(p);
+                            }
+                        } else {
+                            lb.word(param);
+                        }
+                        if (it.hasNext()) {
+                            lines.appendRaw(',');
+                        }
+                    }
                 });
             }
             lines.word(type, true);
@@ -1742,9 +1815,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
             });
             if (block != null) {
                 lines.block(lb -> {
-                    block.buildInto(lb);
+                    if (block.statements.isEmpty()) {
+                        lines.onNewLine().appendRaw("// do nothing");
+                    } else {
+                        block.buildInto(lb);
+                    }
                 });
             } else {
+                // interface method
                 lines.appendRaw(";");
             }
             lines.doubleNewline();
@@ -2473,6 +2551,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.converter = converter;
             this.name = name;
             this.isNew = isNew;
+        }
+
+        T applyFrom(InvocationBuilderBase<?, ?> other) {
+            name = other.name;
+            on = other.on;
+            arguments = other.arguments;
+            isNew = other.isNew;
+            return converter.apply(cast());
         }
 
         @SuppressWarnings("unchecked")
@@ -3223,12 +3309,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    static final BodyBuilder EMPTY = new BodyBuilder() {
-        @Override
-        public void buildInto(LinesBuilder lines
-        ) {
-            // do nothing
-        }
+    static final BodyBuilder EMPTY = (LinesBuilder lines) -> {
+        // do nothing
     };
 
     public static final class LambdaBuilder<T> implements BodyBuilder {
@@ -3334,7 +3416,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
     public static class StringConcatenationBuilder<T> implements BodyBuilder {
 
-        private final BodyBuilder leftSide;
+        private BodyBuilder leftSide;
         private final Function<? super StringConcatenationBuilder<T>, T> converter;
 
         public StringConcatenationBuilder(BodyBuilder leftSide, Function<? super StringConcatenationBuilder<T>, T> converter) {
@@ -3342,14 +3424,62 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.converter = converter;
         }
 
+        public String toString() {
+            return "StringConcatenationBuilder(" + leftSide + ")";
+        }
+
         public ValueExpressionBuilder<StringConcatenationBuilder<T>> with() {
             return new ValueExpressionBuilder<>(veb -> {
+                if (leftSide == null) {
+                    leftSide = veb;
+                    return this;
+                }
                 BodyBuilder newLeftSide = new Composite(leftSide, Operators.PLUS, veb);
-                return new StringConcatenationBuilder<>(newLeftSide, converter);
+                leftSide = newLeftSide;
+                return this;
             });
         }
 
+        public StringConcatenationBuilder<T> append(String stringLiteral) {
+            return with().literal(stringLiteral);
+        }
+
+        public StringConcatenationBuilder<T> append(int intLiteral) {
+            return with().literal(intLiteral);
+        }
+
+        public StringConcatenationBuilder<T> append(float floatLiteral) {
+            return with().literal(floatLiteral);
+        }
+
+        public StringConcatenationBuilder<T> append(long literal) {
+            return with().literal(literal);
+        }
+
+        public StringConcatenationBuilder<T> append(double literal) {
+            return with().literal(literal);
+        }
+
+        public StringConcatenationBuilder<T> append(byte literal) {
+            return with().literal(literal);
+        }
+
+        public StringConcatenationBuilder<T> append(short literal) {
+            return with().literal(literal);
+        }
+
+        public StringConcatenationBuilder<T> append(boolean literal) {
+            return with().literal(literal);
+        }
+
+        public StringConcatenationBuilder<T> appendExpression(String expression) {
+            return with().expression(expression);
+        }
+
         public T endConcatenation() {
+            if (leftSide == null) {
+                throw new IllegalStateException("String concatenation never added to");
+            }
             return converter.apply(this);
         }
 
@@ -4059,6 +4189,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.converter = converter;
         }
 
+        public String toString() {
+            return "ValueExpressionBuilder(" + value + ")";
+        }
+
         /**
          * Create a reference to a field of some object, some newly created
          * object or the return value of invocation of something.
@@ -4473,6 +4607,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         final List<BodyBuilder> statements = new LinkedList<>();
         final Function<? super B, T> converter;
         private final boolean openBlock;
+        private BiConsumer<? super B, ? super BodyBuilder> probe;
 
         BlockBuilderBase(Function<? super B, T> converter, boolean openBlock) {
             this.converter = converter;
@@ -4494,9 +4629,22 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }
         }
 
+        B probeAdditionsWith(BiConsumer<? super B, ? super BodyBuilder> c) {
+            // for debugging duplicate adds
+            this.probe = c;
+            return cast();
+        }
+
+        void addStatement(BodyBuilder bb) {
+            statements.add(bb);
+            if (probe != null) {
+                probe.accept(cast(), bb);
+            }
+        }
+
         public ValueExpressionBuilder<T> returningValue() {
             return new ValueExpressionBuilder<>(veb -> {
-                statements.add(new ReturnStatement(veb));
+                addStatement(new ReturnStatement(veb));
                 return endBlock();
             });
         }
@@ -4504,7 +4652,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public T returningValue(Consumer<ValueExpressionBuilder<?>> c) {
             Holder<T> holder = new Holder<>();
             ValueExpressionBuilder<Void> result = new ValueExpressionBuilder<>(veb -> {
-                statements.add(new ReturnStatement(veb));
+                addStatement(new ReturnStatement(veb));
                 holder.set(endBlock());
                 return null;
             });
@@ -4514,7 +4662,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public NewBuilder<T> returningNew() {
             return new NewBuilder<>(nb -> {
-                statements.add(new ReturnStatement(nb));
+                addStatement(new ReturnStatement(nb));
                 return endBlock();
             });
         }
@@ -4522,7 +4670,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public T returningNew(Consumer<? super NewBuilder<?>> c) {
             Holder<T> h = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
-                statements.add(new ReturnStatement(nb));
+                addStatement(new ReturnStatement(nb));
                 h.set(endBlock());
                 return null;
             });
@@ -4534,7 +4682,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             Holder<T> h = new Holder<>();
             boolean[] done = new boolean[1];
             LambdaBuilder<Void> result = new LambdaBuilder<>(lb -> {
-                statements.add(new ReturnStatement(lb));
+                addStatement(new ReturnStatement(lb));
                 done[0] = true;
                 h.set(endBlock());
                 return null;
@@ -4549,7 +4697,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public LambdaBuilder<T> returningLambda() {
             LambdaBuilder<T> result = new LambdaBuilder<T>(lb -> {
-                statements.add(new ReturnStatement(lb));
+                addStatement(new ReturnStatement(lb));
                 return endBlock();
             });
             return result;
@@ -4557,7 +4705,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public NewBuilder<MethodBuilder<T>> invokeConstructor() {
             NewBuilder<MethodBuilder<T>> result = new NewBuilder<>(nb -> {
-                statements.add(new StatementWrapper(nb));
+                addStatement(new StatementWrapper(nb));
                 return null;
             });
             return result;
@@ -4566,7 +4714,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public B invokeConstructor(Consumer<? super NewBuilder<?>> c) {
             Holder<B> h = new Holder<>();
             NewBuilder<?> result = new NewBuilder<>(nb -> {
-                statements.add(new StatementWrapper(nb));
+                addStatement(new StatementWrapper(nb));
                 h.set(cast());
                 return null;
             });
@@ -4603,7 +4751,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             Holder<IfBuilder<Void>> ibh = new Holder<>();
             ConditionBuilder<IfBuilder<Void>> result = new ConditionBuilder<>(fcb -> {
                 IfBuilder<Void> ib2 = new IfBuilder<>(ib -> {
-                    statements.add(ib);
+                    addStatement(ib);
                     h.set(cast());
                     return null;
                 }, fcb);
@@ -4622,7 +4770,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public ConditionBuilder<IfBuilder<B>> iff() {
             ConditionBuilder<IfBuilder<B>> result = new ConditionBuilder<>(fcb -> {
                 IfBuilder<B> ib2 = new IfBuilder<>(ib -> {
-                    statements.add(ib);
+                    addStatement(ib);
                     return cast();
                 }, fcb);
                 return ib2;
@@ -4763,7 +4911,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 CONTEXT.get().logger();
             }
             return new LogLineBuilder<>(llb -> {
-                statements.add(llb);
+                addStatement(llb);
                 return cast();
             }, level);
         }
@@ -4886,7 +5034,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public B blankLine() {
-            statements.add(new NL());
+            addStatement(new NL());
             return cast();
         }
 
@@ -4911,7 +5059,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         private LambdaBuilder<B> lambda(boolean[] built) {
             return new LambdaBuilder<>(lb -> {
-                statements.add(lb);
+                addStatement(lb);
                 built[0] = true;
                 return cast();
             });
@@ -4941,7 +5089,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         private BlockBuilder<B> synchronizeOn(String what, boolean[] built) {
             SynchronizedBlockBuilder<B> res = new SynchronizedBlockBuilder<>(sb -> {
-                statements.add(sb);
+                addStatement(sb);
                 return cast();
             }, what);
             return res.block();
@@ -4954,7 +5102,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private SimpleLoopBuilder<B> simpleLoop(String type, String loopVarName, boolean[] built) {
             return new SimpleLoopBuilder<>(slb -> {
                 if (!built[0]) {
-                    statements.add(slb);
+                    addStatement(slb);
                     built[0] = true;
                 }
                 return cast();
@@ -4988,23 +5136,30 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private ForVarBuilder<B> forVar(String name, boolean[] built) {
             return new ForVarBuilder<>(fvb -> {
                 built[0] = true;
-                statements.add(fvb);
+                addStatement(fvb);
                 return cast();
             }, name);
+        }
+
+        private void writeStatements(LinesBuilder into) {
+            if (statements.isEmpty()) {
+                into.onNewLine().appendRaw("// do nothing");
+                into.onNewLine();
+                return;
+            }
+            for (BodyBuilder bb : statements) {
+                bb.buildInto(into);
+            }
         }
 
         @Override
         public void buildInto(LinesBuilder lines) {
             if (openBlock) {
                 lines.block(lb -> {
-                    for (BodyBuilder bb : statements) {
-                        bb.buildInto(lb);
-                    }
+                    writeStatements(lb);
                 });
             } else {
-                for (BodyBuilder bb : statements) {
-                    bb.buildInto(lines);
-                }
+                writeStatements(lines);
             }
         }
 
@@ -5013,13 +5168,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public B lineComment(String cmt, boolean trailing) {
-            statements.add(new LineComment(cmt, trailing));
+            addStatement(new LineComment(cmt, trailing));
             return cast();
         }
 
         public TryBuilder<B> trying() {
             TryBuilder<B> tb = new TryBuilder<B>(b -> {
-                statements.add(b);
+                addStatement(b);
                 return cast();
             });
             return tb;
@@ -5028,7 +5183,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public B trying(Consumer<? super TryBuilder<?>> cb) {
             boolean[] done = new boolean[1];
             TryBuilder<Void> tb = new TryBuilder<>(b -> {
-                statements.add(b);
+                addStatement(b);
                 done[0] = true;
                 return null;
             });
@@ -5062,7 +5217,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             boolean[] closed = new boolean[1];
             InvocationBuilder<Void> ib = new InvocationBuilder<>(b -> {
                 closed[0] = true;
-                statements.add(b);
+                addStatement(b);
                 return null;
             }, method);
             c.accept(ib);
@@ -5074,24 +5229,24 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public T andThrow(String what) {
-            statements.add(
+            addStatement(
                     new StatementWrapper(new Composite(new Adhoc("throw"), new Adhoc(checkIdentifier(notNull("what", what))))));
             return endBlock();
         }
 
         public NewBuilder<T> andThrow() {
             NewBuilder<T> result = new NewBuilder<>(nb -> {
-                statements.add(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
+                addStatement(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
                 return endBlock();
             });
             return result;
         }
 
-        public T andThrow(Consumer<? super NewBuilder<?>> c) {
-            Holder<T> h = new Holder<>();
+        public B andThrow(Consumer<? super NewBuilder<?>> c) {
+            Holder<B> h = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
-                statements.add(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
-                h.set(endBlock());
+                addStatement(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
+                h.set(cast());
                 return null;
             });
             c.accept(result);
@@ -5103,7 +5258,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public AssignmentBuilder<B> assign(String variable) {
             return new AssignmentBuilder<>(b -> {
-                statements.add(new StatementWrapper(b));
+                addStatement(new StatementWrapper(b));
                 return cast();
             }, new Adhoc(variable));
         }
@@ -5112,7 +5267,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             boolean[] closed = new boolean[1];
             AssignmentBuilder<Void> ab = new AssignmentBuilder<>(b -> {
                 closed[0] = true;
-                statements.add(new Composite(b, new Adhoc(";")));
+                addStatement(new Composite(b, new Adhoc(";")));
                 return null;
             }, new Adhoc(variable));
             c.accept(ab);
@@ -5123,16 +5278,102 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return cast();
         }
 
+        public B asserting(String expression) {
+            if (expression == null || expression.trim().isEmpty()) {
+                throw new IllegalStateException("Null or empty expression");
+            }
+            if (expression.trim().charAt(expression.length() - 1) != ';') {
+                expression = expression.trim() + ';';
+            }
+            addStatement(new Composite(new Adhoc("assert", true), new Adhoc(expression, true)));
+            return cast();
+        }
+
+        public B assertingNotNull(String expression) {
+            addStatement(new StatementWrapper(new Composite(new Adhoc("assert", true), new Adhoc(expression, true),
+                    new Adhoc("!=", true), new Adhoc("null", true))));
+            return cast();
+        }
+
+        public ValueExpressionBuilder<AssertionBuilder<B>> assertingNotNull() {
+            AssertionBuilder<B> res = new AssertionBuilder<>(ab -> {
+                assert !statements.contains(ab) : " Adding twice: " + ab;
+                addStatement(ab);
+                return cast();
+            }, false);
+            return res.assertingNotNull();
+        }
+
+        public B assertingNotNull(Consumer<ValueExpressionBuilder<AssertionBuilder<?>>> c) {
+            Holder<B> hold = new Holder<>();
+            Holder<AssertionBuilder<Void>> secondary = new Holder<>();
+            ValueExpressionBuilder<AssertionBuilder<?>> bldr = new ValueExpressionBuilder<>(veb -> {
+                AssertionBuilder<Void> result = new AssertionBuilder<>(ab -> {
+                    assert !statements.contains(ab) : " Adding twice: " + ab;
+                    addStatement(ab);
+                    hold.set(cast());
+                    return null;
+                }, true);
+                secondary.set(result);
+                result.assertThat = new Composite(veb, new Adhoc("!=", true), new Adhoc("null", true));
+                return result;
+            });
+            c.accept(bldr);
+            if (secondary.obj != null) {
+                if (!secondary.obj.built) {
+                    secondary.obj.build();
+                }
+            }
+            return hold.get("Value or assertion builder not completed");
+        }
+
+        public ConditionBuilder<AssertionBuilder<B>> asserting() {
+            return new ConditionBuilder<>(cb -> {
+                AssertionBuilder<B> bldr = new AssertionBuilder<>(ab -> {
+                    assert !statements.contains(ab) : " Adding twice: " + ab;
+                    addStatement(ab);
+                    return cast();
+                }, false);
+                bldr.assertThat = cb;
+                return bldr;
+            });
+        }
+
+        public B asserting(Consumer<ConditionBuilder<AssertionBuilder<?>>> c) {
+            Holder<B> hold = new Holder<>();
+            Holder<AssertionBuilder<Void>> secondary = new Holder<>();
+            ConditionBuilder<AssertionBuilder<?>> bldr = new ConditionBuilder<>(cb -> {
+                AssertionBuilder<Void> second = new AssertionBuilder<>(ab -> {
+                    assert !statements.contains(ab) : " Adding twice: " + ab;
+                    addStatement(ab);
+                    hold.set(cast());
+                    return null;
+                }, true);
+                second.assertThat = cb;
+                secondary.set(second);
+                return second;
+            });
+            c.accept(bldr);
+            if (!hold.isSet()) {
+                if (secondary.isSet()) {
+                    if (!secondary.obj.built) {
+                        secondary.obj.build();
+                    }
+                }
+            }
+            return hold.get("Assertion builder not completed");
+        }
+
         public InvocationBuilder<B> invoke(String method) {
             return new InvocationBuilder<>(ib -> {
-                statements.add(new WrappedStatement(ib));
+                addStatement(new WrappedStatement(ib));
                 return cast();
             }, method);
         }
 
         public BlockBuilder<B> block() {
             return new BlockBuilder<>(bk -> {
-                statements.add(bk);
+                addStatement(bk);
                 return cast();
             }, true);
         }
@@ -5141,13 +5382,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
             if (stmt.endsWith(";")) {
                 stmt = stmt.substring(0, stmt.length() - 1);
             }
-            statements.add(new OneStatement(stmt));
+            addStatement(new OneStatement(stmt));
             return cast();
         }
 
         public FieldReferenceBuilder<B> returningField(String name) {
             return new FieldReferenceBuilder<>(name, fb -> {
-                statements.add(new ReturnStatement(fb));
+                addStatement(new ReturnStatement(fb));
                 return cast();
             });
         }
@@ -5155,7 +5396,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public B returningField(String name, Consumer<FieldReferenceBuilder<?>> c) {
             Holder<B> holder = new Holder<>();
             FieldReferenceBuilder<Void> result = new FieldReferenceBuilder<>(name, frb -> {
-                statements.add(new ReturnStatement(frb));
+                addStatement(new ReturnStatement(frb));
                 holder.set(cast());
                 return null;
             });
@@ -5163,7 +5404,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public B returning(String s) {
-            statements.add(new ReturnStatement(new Adhoc(s)));
+            addStatement(new ReturnStatement(new Adhoc(s)));
             return cast();
         }
 
@@ -5172,18 +5413,18 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public B returning(Number num) {
-            statements.add(new ReturnStatement(friendlyNumber(num)));
+            addStatement(new ReturnStatement(friendlyNumber(num)));
             return cast();
         }
 
         public B returningStringLiteral(String s) {
-            statements.add(new ReturnStatement(new Adhoc(LinesBuilder.stringLiteral(s))));
+            addStatement(new ReturnStatement(new Adhoc(LinesBuilder.stringLiteral(s))));
             return cast();
         }
 
         public InvocationBuilder<B> returningInvocationOf(String method) {
             return new InvocationBuilder<>(ib -> {
-                statements.add(new ReturnStatement(ib));
+                addStatement(new ReturnStatement(ib));
                 return cast();
             }, method);
         }
@@ -5192,7 +5433,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             boolean[] built = new boolean[1];
             Holder<T> holder = new Holder<>();
             InvocationBuilder<T> b = new InvocationBuilder<>(ib -> {
-                statements.add(new ReturnStatement(ib));
+                addStatement(new ReturnStatement(ib));
                 built[0] = true;
                 T result = this.converter.apply(cast());
                 holder.set(result);
@@ -5211,18 +5452,18 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public B incrementVariable(String var) {
-            statements.add(new OneStatement(var + "++"));
+            addStatement(new OneStatement(var + "++"));
             return cast();
         }
 
         public B decrementVariable(String var) {
-            statements.add(new OneStatement(var + "--"));
+            addStatement(new OneStatement(var + "--"));
             return cast();
         }
 
         public DeclarationBuilder<B> declare(String what) {
             return new DeclarationBuilder<>(db -> {
-                statements.add(db);
+                addStatement(db);
                 return cast();
             }, what);
         }
@@ -5230,7 +5471,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public B declare(String what, Consumer<DeclarationBuilder<?>> c) {
             Holder<B> h = new Holder<>();
             DeclarationBuilder<Void> result = new DeclarationBuilder<>(db -> {
-                statements.add(db);
+                addStatement(db);
                 h.set(cast());
                 return null;
             }, what);
@@ -5239,7 +5480,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public SwitchBuilder<B> switchingOn(String on) {
             return new SwitchBuilder<>(sb -> {
-                statements.add(sb);
+                addStatement(sb);
                 return cast();
             }, on);
         }
@@ -5247,7 +5488,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public B switchingOn(String on, Consumer<? super SwitchBuilder<?>> c) {
             boolean[] built = new boolean[1];
             SwitchBuilder<Void> sw = new SwitchBuilder<>(sb -> {
-                statements.add(sb);
+                addStatement(sb);
                 built[0] = true;
                 return null;
             }, on);
@@ -5370,6 +5611,108 @@ public final class ClassBuilder<T> implements BodyBuilder {
                     lines.onNewLine();
                 }
             }
+        }
+    }
+
+    public static final class AssertionBuilder<T> implements BodyBuilder {
+
+        private BodyBuilder assertThat;
+        private BodyBuilder message;
+        private final Function<AssertionBuilder<T>, T> converter;
+        private boolean built;
+        private Exception builtAt;
+        private final boolean forLambda;
+
+        AssertionBuilder(BodyBuilder leftSide, Function<AssertionBuilder<T>, T> converter) {
+            assertThat = leftSide;
+            this.converter = converter;
+            forLambda = true;
+        }
+
+        AssertionBuilder(Function<AssertionBuilder<T>, T> converter, boolean forLambda) {
+            this.converter = converter;
+            this.forLambda = forLambda;
+        }
+
+        @Override
+        public String toString() {
+            return "assert " + assertThat + (message == null ? ";" : ":" + message + "; //"
+                    + (built ? "built" : "not-yet-built"));
+        }
+
+        public StringConcatenationBuilder<T> withMessage() {
+            return new StringConcatenationBuilder<>(message, sb -> {
+                message = sb;
+                return build();
+            });
+        }
+
+        public StringConcatenationBuilder<T> assertingNotNull(String expression) {
+            assertThat = new Composite(new Adhoc(expression, true), new Adhoc("!=", true), new Adhoc("null", true));
+            return withMessage();
+        }
+
+        ValueExpressionBuilder<AssertionBuilder<T>> assertingNotNull() {
+            return new ValueExpressionBuilder<>(veb -> {
+                assertThat = new Composite(veb, new Adhoc("!=", true), new Adhoc("null", true));
+                return this;
+            });
+        }
+
+        public T withMessage(Consumer<StringConcatenationBuilder<?>> c) {
+            Holder<T> holder = new Holder<>();
+            boolean[] finished = new boolean[1];
+            StringConcatenationBuilder<Void> bldr = new StringConcatenationBuilder<>(null, sb -> {
+                message = sb;
+                if (!forLambda) {
+                    holder.set(build());
+                }
+                finished[0] = true;
+                return null;
+            });
+            c.accept(bldr);
+            if (!finished[0]) {
+                bldr.endConcatenation();
+            }
+            return forLambda ? null : holder.get("Assertion message builder created but not completed");
+        }
+
+        public T withMessage(String message) {
+            if (this.message != null) {
+                throw new IllegalStateException("Message already set to " + this.message);
+            }
+            this.message = new Adhoc(LinesBuilder.stringLiteral(message), true);
+            return built ? null : build();
+        }
+
+        public T build() {
+            if (built) {
+                throw new IllegalStateException("Built twice", builtAt);
+            }
+            if (assertThat == null) {
+                throw new IllegalStateException("AssertionBuilder not completed - "
+                        + "no clause for what to assert provided");
+            }
+            built = true;
+            builtAt = new Exception(toString());
+            return converter.apply(this);
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            if (assertThat == null) {
+                throw new IllegalStateException("AssertionBuilder not completed - "
+                        + "no clause for what to assert provided");
+            }
+            lines.statement(lb -> {
+                lb.onNewLine().word("assert");
+                assertThat.buildInto(lb);
+                if (message != null) {
+                    lines.word(":", true);
+                    message.buildInto(lb);
+
+                }
+            });
         }
     }
 
@@ -5720,6 +6063,30 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.op = op;
         }
 
+        @Override
+        public String toString() {
+            LinesBuilder lines = new LinesBuilder(4);
+            if (negated) {
+                lines.appendRaw('!');
+            }
+            if (parenthesized) {
+                lines.appendRaw('(');
+            }
+            if (prev != null) {
+                prev.buildInto(lines);
+            }
+            if (op != null) {
+                op.buildInto(lines);
+            }
+            if (clause != null) {
+                clause.buildInto(lines);
+            }
+            if (parenthesized) {
+                lines.appendRaw(')');
+            }
+            return lines.toString();
+        }
+
         public ConditionBuilder<T> not() {
             negated = !negated;
             parenthesized();
@@ -5822,6 +6189,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         @Override
+        public String toString() {
+            return what;
+        }
+
+        @Override
         public void buildInto(LinesBuilder lines) {
             lines.word(what, hangingWrap);
         }
@@ -5885,6 +6257,329 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return new ConditionRightSideBuilder<>(leftSide.converter, leftSide, ComparisonOperation.INSTANCEOF);
         }
 
+        public T eqaullingExpression(String expression) {
+            return equals().expression(expression).endCondition();
+        }
+
+        /**
+         * Object rather than instance equality.
+         *
+         * @param expression An expression
+         * @return the owner of this builder
+         */
+        public T isEquals(String expression) {
+            return leftSide.converter.apply(new Composite(leftSide,
+                    new Adhoc(".equals", true),
+                    new Punctuation('('),
+                    new Adhoc(expression), new Punctuation(')')));
+        }
+
+        public InvocationBuilder<T> equalsInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return leftSide.converter.apply(new Composite(leftSide, new Adhoc(".equals", true),
+                        new Punctuation('('), ib, new Punctuation(')')));
+            }, what);
+        }
+
+        public InvocationBuilder<T> notEqualsInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return leftSide.converter.apply(new Composite(new Punctuation('!'), leftSide, new Adhoc(".equals", true),
+                        new Punctuation('('), ib, new Punctuation(')')));
+            }, what);
+        }
+
+        public InvocationBuilder<T> isEqualToInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return equals().invoke(what).applyFrom(ib).endCondition();
+            }, what);
+        }
+
+        public InvocationBuilder<T> isLessThanInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return lessThan().invoke(what).applyFrom(ib).endCondition();
+            }, what);
+        }
+
+        public InvocationBuilder<T> isGreaterThanInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return greaterThan().invoke(what).applyFrom(ib).endCondition();
+            }, what);
+        }
+
+        public InvocationBuilder<T> isLessThanOrEqualToInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return lessThanOrEqualto().invoke(what).applyFrom(ib).endCondition();
+            }, what);
+        }
+
+        public InvocationBuilder<T> isGreaterThanOrEqualToInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return greaterThanOrEqualto().invoke(what).applyFrom(ib).endCondition();
+            }, what);
+        }
+
+        public InvocationBuilder<T> isNotEqualToInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                return notEquals().invoke(what).applyFrom(ib).endCondition();
+            }, what);
+        }
+
+        public FieldReferenceBuilder<T> equalsField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return leftSide.converter.apply(new Composite(leftSide, new Adhoc(".equals", true),
+                        new Punctuation('('),
+                        frb, new Punctuation(')')));
+            });
+        }
+
+        public FieldReferenceBuilder<T> isNotEqualsField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return leftSide.converter.apply(new Composite(new Punctuation('!'),
+                        leftSide, new Adhoc(".equals", true),
+                        new Punctuation('('),
+                        frb, new Punctuation(')')));
+            });
+        }
+
+        public FieldReferenceBuilder<T> isEqualToField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return equals().field(name).setFrom(frb).endCondition();
+            });
+        }
+
+        public FieldReferenceBuilder<T> isGreaterThanField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return greaterThan().field(name).setFrom(frb).endCondition();
+            });
+        }
+
+        public FieldReferenceBuilder<T> isGreaterThanOrEqualToField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return greaterThanOrEqualto().field(name).setFrom(frb).endCondition();
+            });
+        }
+
+        public FieldReferenceBuilder<T> isLessThanField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return lessThan().field(name).setFrom(frb).endCondition();
+            });
+        }
+
+        public FieldReferenceBuilder<T> isLessThanOrEqualToField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return lessThanOrEqualto().field(name).setFrom(frb).endCondition();
+            });
+        }
+
+        public FieldReferenceBuilder<T> notEqualToField(String name) {
+            return new FieldReferenceBuilder<>(name, frb -> {
+                return notEquals().field(name).setFrom(frb).endCondition();
+            });
+        }
+
+        public T isEqualToString(String lit) {
+            return leftSide.converter.apply(new Composite(leftSide, new Adhoc(".equals", true),
+                    new Punctuation('('),
+                    new Adhoc(LinesBuilder.stringLiteral(lit)), new Punctuation(')')));
+        }
+
+        public T isNotEquals(String expression) {
+            return leftSide.converter.apply(new Composite(new Punctuation('!'),
+                    leftSide, new Adhoc(".equals", true),
+                    new Punctuation('('),
+                    new Adhoc(expression), new Punctuation(')')));
+        }
+
+        public T isNotEqualToString(String lit) {
+            return leftSide.converter.apply(new Composite(new Punctuation('!'),
+                    leftSide, new Adhoc(".equals", true),
+                    new Punctuation('('),
+                    new Adhoc(LinesBuilder.stringLiteral(lit)), new Punctuation(')')));
+        }
+
+        public T isEqualTo(String lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isEqualTo(int lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isEqualTo(short lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isEqualTo(float lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isEqualTo(long lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isEqualTo(double lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isEqualTo(byte lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public T isGreaterThan(String expression) {
+            return equals().expression(expression).endCondition();
+        }
+
+        public T isGreaterThan(int lit) {
+            return greaterThan().literal(lit).endCondition();
+        }
+
+        public T isGreaterThan(short lit) {
+            return greaterThan().literal(lit).endCondition();
+        }
+
+        public T isGreaterThan(float lit) {
+            return greaterThan().literal(lit).endCondition();
+        }
+
+        public T isGreaterThan(long lit) {
+            return greaterThan().literal(lit).endCondition();
+        }
+
+        public T isGreaterThan(double lit) {
+            return greaterThan().literal(lit).endCondition();
+        }
+
+        public T isGreaterThan(byte lit) {
+            return greaterThan().literal(lit).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(String expression) {
+            return greaterThanOrEqualto().expression(expression).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(int lit) {
+            return greaterThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(short lit) {
+            return greaterThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(float lit) {
+            return greaterThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(long lit) {
+            return greaterThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(double lit) {
+            return greaterThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isGreaterThanOrEqualTo(byte lit) {
+            return greaterThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isLessThan(String expression) {
+            return lessThan().expression(expression).endCondition();
+        }
+
+        public T isLessThan(int lit) {
+            return lessThan().literal(lit).endCondition();
+        }
+
+        public T isLessThan(short lit) {
+            return lessThan().literal(lit).endCondition();
+        }
+
+        public T isLessThan(float lit) {
+            return lessThan().literal(lit).endCondition();
+        }
+
+        public T isLessThan(long lit) {
+            return lessThan().literal(lit).endCondition();
+        }
+
+        public T isLessThan(double lit) {
+            return lessThan().literal(lit).endCondition();
+        }
+
+        public T isLessThan(byte lit) {
+            return lessThan().literal(lit).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(String expression) {
+            return lessThanOrEqualto().expression(expression).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(int lit) {
+            return lessThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(short lit) {
+            return lessThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(float lit) {
+            return lessThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(long lit) {
+            return lessThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(double lit) {
+            return lessThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isLessThanOrEqualTo(byte lit) {
+            return lessThanOrEqualto().literal(lit).endCondition();
+        }
+
+        public T isNotEqualTo(String expression) {
+            return notEquals().expression(expression).endCondition();
+        }
+
+        public T isNotEqualTo(int lit) {
+            return notEquals().literal(lit).endCondition();
+        }
+
+        public T isNotEqualTo(short lit) {
+            return notEquals().literal(lit).endCondition();
+        }
+
+        public T isNotEqualTo(float lit) {
+            return notEquals().literal(lit).endCondition();
+        }
+
+        public T isNotEqualTo(long lit) {
+            return notEquals().literal(lit).endCondition();
+        }
+
+        public T isNotEqualTo(double lit) {
+            return notEquals().literal(lit).endCondition();
+        }
+
+        public T isNotEqualTo(byte lit) {
+            return notEquals().literal(lit).endCondition();
+        }
+
+        public T instanceOf(String type) {
+            return instanceOf().expression(type).endCondition();
+        }
+
+        public T equalling(boolean lit) {
+            return equals().literal(lit).endCondition();
+        }
+
+        public InvocationBuilder<T> equallingInvocation(String what) {
+            return new InvocationBuilder<>(ib -> {
+                InvocationBuilder<FinishableConditionBuilder<T>> ivb = equals().invoke(what);
+                return ivb.applyFrom(ib).endCondition();
+            }, what);
+        }
+
         @Override
         public void buildInto(LinesBuilder lines) {
             leftSide.buildInto(lines);
@@ -5905,6 +6600,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 negated = ((ConditionBuilder<?>) ((ConditionBuilder<?>) leftSide)).negated;
             }
             this.op = op;
+        }
+
+        public String toString() {
+            return (negated ? "!" : "") + leftSide + " " + op;
         }
 
         public FieldReferenceBuilder<FinishableConditionBuilder<T>> field(String name) {
@@ -6058,6 +6757,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.rightSide = rightSide;
         }
 
+        public String toString() {
+            return leftSideAndOp + " " + rightSide;
+        }
+
         public ConditionBuilder<T> or() {
             return new ConditionBuilder<>(converter, this, LogicalOperation.OR);
         }
@@ -6205,7 +6908,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
     private static enum LogicalOperation implements BodyBuilder {
         OR,
-        AND,;
+        AND;
 
         @Override
         public void buildInto(LinesBuilder lines) {
@@ -6926,12 +7629,22 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         private final BodyBuilder bb;
 
+        public StatementWrapper(BodyBuilder... multi) {
+            this(new Composite(multi));
+        }
+
         public StatementWrapper(BodyBuilder bb) {
             this.bb = bb;
         }
 
         @Override
         public void buildInto(LinesBuilder lines) {
+            if (bb instanceof Composite) {
+                Composite comp = (Composite) bb;
+                if (comp.contents.length == 0) {
+                    return;
+                }
+            }
             lines.onNewLine();
             bb.buildInto(lines);
             lines.backup();
@@ -7021,6 +7734,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
     private static final Pattern ARR = Pattern.compile("^\\s*?(\\S+)\\s*?\\[\\s*?\\]\\s*$");
 
     private static String checkIdentifier(String name) {
+        if (name == null) {
+            throw new IllegalArgumentException("Null identifier");
+        }
+        if (name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Empty or all-whitespace "
+                    + "identifier: '" + name + "'");
+        }
         Matcher arrM = ARR.matcher(name);
         if (arrM.find()) {
             checkIdentifier(arrM.group(1));
