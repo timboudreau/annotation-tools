@@ -7734,10 +7734,17 @@ public final class ClassBuilder<T> implements BodyBuilder {
     private static final Pattern ARR = Pattern.compile("^\\s*?(\\S+)\\s*?\\[\\s*?\\]\\s*$");
 
     private static String checkIdentifier(String name) {
+        return checkIdentifier(name, false);
+    }
+
+    private static String checkIdentifier(String name, boolean emptyOk) {
         if (name == null) {
             throw new IllegalArgumentException("Null identifier");
         }
         if (name.trim().isEmpty()) {
+            if (emptyOk) {
+                return name;
+            }
             throw new IllegalArgumentException("Empty or all-whitespace "
                     + "identifier: '" + name + "'");
         }
@@ -7747,11 +7754,13 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return name;
         }
         if (name.indexOf('<') > 0) {
-            visitTypeNames(name, ClassBuilder::checkIdentifier);
+            visitTypeNames(name, nm -> {
+                checkIdentifier(nm, true);
+            });
             return name;
         } else if (name.indexOf('.') > 0) {
             for (String nm : name.split("\\.")) {
-                checkIdentifier(nm);
+                checkIdentifier(nm, false);
             }
             return name;
         }
