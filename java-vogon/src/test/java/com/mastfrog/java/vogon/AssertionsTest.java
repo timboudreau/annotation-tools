@@ -174,13 +174,13 @@ public class AssertionsTest {
         assertSequence(cb, "implements PoozleHoozle, Wuzzle<T>, Waggle<R>");
     }
 
-    private void assertSequence(ClassBuilder<String> cb, String seq) {
+    static void assertSequence(ClassBuilder<String> cb, String seq) {
         String noSpaces = cb.build().replaceAll("\\s+", "");
         String expNoSpaces = seq.replaceAll("\\s+", "");
         assertTrue(noSpaces.contains(expNoSpaces), "Did not find '" + seq + "' in " + cb);
     }
 
-    private void assertLine(ClassBuilder<String> cb, String text) {
+    static void assertLine(ClassBuilder<String> cb, String text) {
         String exp = text.replaceAll("\\s+", "");
         boolean found = false;
         for (String line : cb.build().split("\n")) {

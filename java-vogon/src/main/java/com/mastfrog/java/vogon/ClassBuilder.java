@@ -1,6 +1,6 @@
 package com.mastfrog.java.vogon;
 
-import static com.mastfrog.java.vogon.ClassBuilder.BitwiseOperators.COMPLEMENT;
+import static com.mastfrog.java.vogon.BitwiseOperators.COMPLEMENT;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -445,6 +445,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         Composite(BodyBuilder... all) {
             this.contents = all;
+        }
+
+        static Composite of(List<BodyBuilder> all) {
+            return new Composite(all.toArray(new BodyBuilder[all.size()]));
         }
 
         @Override
@@ -2146,6 +2150,182 @@ public final class ClassBuilder<T> implements BodyBuilder {
         });
 
     }
+    private static BodyBuilder RAW_BRACKETS = new BackupRaw("[]");
+    private static BodyBuilder WRAPPABLE_BRACKETS = new Adhoc("[]");
+
+    /**
+     * Gen an array literal or dimensions builder, generate the front half of a
+     * declaration, for example, the
+     * <code>Color[matrixWidth][matrixHeight]</code> portion of an array
+     * declaration - both sides need to know the dimension count.
+     *
+     * @param <T> The builder's return type
+     * @param alb The builder
+     * @return A composite
+     */
+    private static <T> BodyBuilder typeAndDimensions(ArrayDeclarationBuilder<T> alb) {
+        List<BodyBuilder> declarationWithDimensions = new ArrayList<>();
+        declarationWithDimensions.add(alb.type());
+        for (int i = 0; i < alb.dimensionCount(); i++) {
+            if (i == 0) {
+                declarationWithDimensions.add(RAW_BRACKETS);
+            } else {
+                declarationWithDimensions.add(WRAPPABLE_BRACKETS);
+            }
+        }
+        return Composite.of(declarationWithDimensions);
+    }
+
+    public static class ArrayElementsBuilder<T> extends AbstractArrayElementsBuilder<T, ArrayElementsBuilder<T>> {
+
+        ArrayElementsBuilder(Function<BodyBuilder, T> converter, Object... initial) {
+            super(converter, initial);
+        }
+
+        public T of(String of) {
+            return super.of(new Adhoc(checkIdentifier(of)));
+        }
+
+        public FieldReferenceBuilder<T> ofField(String field) {
+            return new FieldReferenceBuilder<>(field, frb -> {
+                return super.of(frb);
+            });
+        }
+
+        public InvocationBuilder<T> ofInvocationOf(String method) {
+            return new InvocationBuilder<>(ivb -> {
+                return super.of(ivb);
+            }, method);
+        }
+
+        public ValueExpressionBuilder<T> of() {
+            return new ValueExpressionBuilder<>(veb -> {
+                return super.of(veb);
+            });
+        }
+    }
+
+    public static class ArrayElementsDereferenceBuilder<T> extends AbstractArrayElementsBuilder<T, ArrayElementsDereferenceBuilder<T>> {
+
+        ArrayElementsDereferenceBuilder(BodyBuilder of, Function<BodyBuilder, T> converter, Object... initial) {
+            super(converter, initial);
+            this.of = of;
+        }
+
+        @Override
+        public T closeArrayElements() {
+            return super.closeArrayElements();
+        }
+    }
+
+    public static abstract class AbstractArrayElementsBuilder<T, A extends AbstractArrayElementsBuilder<T, A>> implements BodyBuilder {
+
+        BodyBuilder of;
+        private final Function<BodyBuilder, T> converter;
+        private List<BodyBuilder> elements = new ArrayList<>();
+
+        AbstractArrayElementsBuilder(Function<BodyBuilder, T> converter, Object... initial) {
+            this.converter = converter;
+            for (Object s : initial) {
+                elements.add(new Adhoc(s.toString()));
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        A cast() {
+            return (A) this;
+        }
+
+        T of(BodyBuilder of) {
+            this.of = of;
+            return closeArrayElements();
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.wrappable(lb -> {
+                of.buildInto(lines);
+                for (BodyBuilder bb : elements) {
+                    lb.squareBrackets(sq -> {
+                        bb.buildInto(sq);
+                    });
+                }
+            });
+        }
+
+        public FieldReferenceBuilder<A> elementFromField(String fieldName) {
+            return new FieldReferenceBuilder<>(fieldName, frb -> {
+                elements.add(frb);
+                return cast();
+            });
+        }
+
+        public InvocationBuilder<A> elementFromInvocationOf(String name) {
+            return new InvocationBuilder<>(ib -> {
+                elements.add(ib);
+                return cast();
+            }, name);
+        }
+
+        public A element(int index) {
+            if (index < 0) {
+                throw new IllegalArgumentException("Attempting negative array index");
+            }
+            elements.add(new Adhoc(Integer.toString(index), true));
+            return cast();
+        }
+
+        public A element(String expression) {
+            elements.add(new Adhoc(expression, true));
+            return cast();
+        }
+
+        public ValueExpressionBuilder<A> element() {
+            return new ValueExpressionBuilder<>(veb -> {
+                elements.add(veb);
+                return cast();
+            });
+        }
+
+        public A element(Consumer<ValueExpressionBuilder<?>> c) {
+            Holder<A> hold = new Holder<>();
+            ValueExpressionBuilder<Void> result = new ValueExpressionBuilder<>(veb -> {
+                elements.add(veb);
+                hold.set(cast());
+                return null;
+            });
+            c.accept(result);
+            return hold.get("Array element value expression not completed: " + result);
+        }
+
+        T closeArrayElements() {
+            if (elements.isEmpty()) {
+                throw new IllegalStateException("Elements not set");
+            }
+            if (of == null) {
+                throw new IllegalStateException("Target of array dereference not set");
+            }
+            return converter.apply(this);
+        }
+    }
+
+    static final class Cast implements BodyBuilder {
+
+        private final BodyBuilder what;
+
+        public Cast(String what) {
+            this(new Adhoc(what));
+        }
+
+        public Cast(BodyBuilder what) {
+            this.what = what;
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.parens(what::buildInto);
+        }
+    }
 
     public static final class AssignmentBuilder<T> implements BodyBuilder {
 
@@ -2153,6 +2333,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private BodyBuilder type;
         private BodyBuilder assignment;
         private final BodyBuilder varName;
+        private BodyBuilder cast;
 
         AssignmentBuilder(Function<AssignmentBuilder<T>, T> converter, BodyBuilder varName) {
             this.converter = converter;
@@ -2160,6 +2341,9 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public AssignmentBuilder<T> withType(String type) {
+            if (this.type != null) {
+                throw new IllegalStateException("A type was already set: " + type);
+            }
             this.type = parseTypeName(type);
             return this;
         }
@@ -2174,6 +2358,15 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 assignment = frb;
                 return converter.apply(this);
             });
+        }
+
+        public AssignmentBuilder<T> castTo(String type) {
+            if (cast != null) {
+                throw new IllegalStateException("Cast already set to "
+                        + cast + " - cannot be set twice");
+            }
+            cast = new Cast(checkIdentifier(type));
+            return this;
         }
 
         public T toField(String field, Consumer<FieldReferenceBuilder<?>> c) {
@@ -2267,9 +2460,30 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public ArrayLiteralBuilder<T> toArrayLiteral(String type) {
             return new ArrayLiteralBuilder<>(alb -> {
                 this.assignment = alb;
-                this.type = new Composite(alb.type, new BackupRaw("[]"));
+                this.type = typeAndDimensions(alb);
                 return converter.apply(this);
             }, type);
+        }
+
+        public ArrayElementsBuilder<T> toArrayElement(Object first) {
+            if (first instanceof Number) {
+                if (((Number) first).doubleValue() < 0) {
+                    throw new IllegalArgumentException("Attempting negative array index");
+                }
+            }
+            return new ArrayElementsBuilder<>(aeb -> {
+                this.assignment = aeb;
+//                this type = typeAndDimensions(aeb);
+                return converter.apply(this);
+            }, first);
+        }
+
+        public ArrayElementsBuilder<T> toArrayElement() {
+            return new ArrayElementsBuilder<>(aeb -> {
+                this.assignment = aeb;
+//                this type = typeAndDimensions(aeb);
+                return converter.apply(this);
+            });
         }
 
         public T toArrayLiteral(String type, Consumer<ArrayLiteralBuilder<?>> c) {
@@ -2277,7 +2491,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             ArrayLiteralBuilder<Void> res = new ArrayLiteralBuilder<>(alb -> {
                 this.assignment = alb;
                 holder.set(converter.apply(this));
-                this.type = new Composite(alb.type, new BackupRaw("[]"));
+                this.type = typeAndDimensions(alb);
                 return null;
             }, type);
             c.accept(res);
@@ -2297,21 +2511,112 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 if (varName != null) {
                     varName.buildInto(lb);
                 }
-                lb.word("=");
+                lb.word("=").appendRaw(' ');
+                if (cast != null) {
+                    cast.buildInto(lb);
+                }
                 assignment.buildInto(lb);
             });
         }
     }
 
-    public static final class ArrayLiteralBuilder<T> implements BodyBuilder {
+    public static abstract class ArrayDeclarationBuilder<T> implements BodyBuilder {
+
+        public abstract T closeArrayLiteral();
+
+        abstract BodyBuilder type();
+
+        abstract int dimensionCount();
+    }
+
+    public static final class ArrayDimensionsBuilder<T> extends ArrayDeclarationBuilder<T> {
+
+        private final Function<ArrayDeclarationBuilder<T>, T> converter;
+        private final BodyBuilder type;
+        private List<BodyBuilder> dimensions = new ArrayList<>();
+
+        ArrayDimensionsBuilder(Function<ArrayDeclarationBuilder<T>, T> converter, BodyBuilder type, Object firstDimension) {
+            this.converter = converter;
+            this.type = type;
+            dimensions.add(new Adhoc(firstDimension.toString()));
+        }
+
+        @Override
+        BodyBuilder type() {
+            return type;
+        }
+
+        public ArrayDimensionsBuilder<T> withDimension(int dim) {
+            dimensions.add(new Adhoc(Integer.toString(dim)));
+            return this;
+        }
+
+        public ArrayDimensionsBuilder<T> withDimension(String exp) {
+            dimensions.add(new Adhoc(exp));
+            return this;
+        }
+
+        public FieldReferenceBuilder<ArrayDimensionsBuilder<T>> withDimensionFromField(String what) {
+            return new FieldReferenceBuilder<>(what, frb -> {
+                dimensions.add(frb);
+                return this;
+            });
+        }
+
+        public InvocationBuilder<ArrayDimensionsBuilder<T>> withDimensionFromInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                dimensions.add(ib);
+                return this;
+            }, what);
+        }
+
+        @Override
+        int dimensionCount() {
+            return dimensions.size();
+        }
+
+        @Override
+        public T closeArrayLiteral() {
+            return converter.apply(this);
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.word("new");
+            type.buildInto(lines);
+            lines.backup();
+            for (BodyBuilder dim : dimensions) {
+                lines.squareBrackets(dim::buildInto);
+            }
+        }
+    }
+
+    public static final class ArrayLiteralBuilder<T> extends ArrayDeclarationBuilder<T> {
 
         private final List<BodyBuilder> all = new LinkedList<>();
-        private final Function<ArrayLiteralBuilder<T>, T> converter;
+        private final Function<ArrayDeclarationBuilder<T>, T> converter;
         private final BodyBuilder type;
 
-        ArrayLiteralBuilder(Function<ArrayLiteralBuilder<T>, T> converter, String type) {
+        ArrayLiteralBuilder(Function<ArrayDeclarationBuilder<T>, T> converter, String type) {
             this.converter = converter;
             this.type = type == null ? null : parseTypeName(type);
+        }
+
+        int dimensionCount() {
+            return 1;
+        }
+
+        @Override
+        BodyBuilder type() {
+            return type;
+        }
+
+        public ArrayDimensionsBuilder<T> withDimension(int dim) {
+            if (!all.isEmpty()) {
+                throw new IllegalStateException("Can either specify array contents, "
+                        + "or array size when declaring an array, not both.");
+            }
+            return new ArrayDimensionsBuilder<>(converter, type, dim);
         }
 
         public T closeArrayLiteral() {
@@ -2510,6 +2815,20 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }, methodName);
             c.accept(inv);
             return holder.get("Invocation not completed");
+        }
+
+        public NewBuilder<T> onNew(String type) {
+            return new NewBuilder<>(nb -> {
+                this.on = nb;
+                return converter.apply(cast());
+            });
+        }
+
+        public ArrayElementsBuilder<T> onArrayElement(int el) {
+            return new ArrayElementsBuilder<T>(aeb -> {
+                this.on = aeb;
+                return converter.apply(cast());
+            }, el);
         }
 
         public T onThis() {
@@ -4113,65 +4432,6 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    enum BitwiseOperators implements Operator {
-        OR("|"),
-        AND("&"),
-        XOR("^"),
-        COMPLEMENT("~"),
-        SHIFT_LEFT("<<"),
-        SHIFT_RIGHT(">>"),
-        ROTATE("<<<");
-        private final String stringRep;
-
-        private BitwiseOperators(String stringRep) {
-            this.stringRep = stringRep;
-        }
-
-        @Override
-        public void buildInto(LinesBuilder lines) {
-            lines.word(toString() + " ");
-        }
-
-        @Override
-        public String toString() {
-            return stringRep;
-        }
-
-        @Override
-        public boolean applicableTo(Number num) {
-            return num instanceof Integer || num instanceof Long;
-        }
-    }
-
-    enum Operators implements Operator {
-        PLUS("+"),
-        MINUS("-"),
-        TIMES("*"),
-        DIVIDED_BY("/"),
-        MODULO("%"),;
-
-        private final String stringRep;
-
-        private Operators(String stringRep) {
-            this.stringRep = stringRep;
-        }
-
-        @Override
-        public void buildInto(LinesBuilder lines) {
-            lines.word(toString() + " ");
-        }
-
-        @Override
-        public String toString() {
-            return stringRep;
-        }
-
-        @Override
-        public boolean applicableTo(Number num) {
-            return true;
-        }
-    }
-
     /**
      * Generic builder for Java expressions which return something - literal
      * values, method invocations, fields on accessible objects, etc. Most
@@ -4296,6 +4556,31 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public T literal(String s) {
             value = new Adhoc(LinesBuilder.stringLiteral(s));
             return converter.apply(this);
+        }
+
+        public ValueExpressionBuilder<T> castTo(String type) {
+            BodyBuilder typeBody = parseTypeName(type);
+            value = new Composite(new Punctuation('('), typeBody, new Punctuation(')'));
+            return this;
+        }
+
+        public ArrayElementsDereferenceBuilder<ValueExpressionBuilder<T>> arrayElements() {
+            return new ArrayElementsDereferenceBuilder<>(value, aedb -> {
+                value = aedb;
+                return this;
+            });
+        }
+
+        public ValueExpressionBuilder<T> arrayElements(Consumer<ArrayElementsDereferenceBuilder<?>> c) {
+            Holder<ValueExpressionBuilder<T>> hold = new Holder<>();
+            ArrayElementsDereferenceBuilder<Void> bldr = new ArrayElementsDereferenceBuilder<>(value,
+                    aedb -> {
+                        value = aedb;
+                        hold.set(this);
+                        return null;
+                    });
+            c.accept(bldr);
+            return hold.get(() -> bldr.closeArrayElements());
         }
 
         public ValueExpressionBuilder<StringConcatenationBuilder<T>> stringConcatenation() {
@@ -5263,6 +5548,47 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }, new Adhoc(variable));
         }
 
+        public B assignArrayElement(Consumer<ArrayElementsBuilder<AssignmentBuilder<Void>>> c) {
+            Holder<B> hold = new Holder<>();
+            ArrayElementsBuilder<AssignmentBuilder<Void>> bldr
+                    = new ArrayElementsBuilder<>(aedb -> {
+                        return new AssignmentBuilder<>(assig -> {
+                            addStatement(new StatementWrapper(assig));
+                            hold.set(cast());
+                            return null;
+                        }, aedb);
+                    });
+            c.accept(bldr);
+            return hold.get("Array element assignment not completed");
+        }
+
+        public AssignmentBuilder<B> assignArrayElements(Object exp1, Object... more) {
+            ArrayElementsBuilder<AssignmentBuilder<B>> b = assignArrayElement();
+            b.element(exp1.toString());
+            for (Object o : more) {
+                b.element(o.toString());
+            }
+            return b.closeArrayElements();
+        }
+
+        public ArrayElementsBuilder<AssignmentBuilder<B>> assignArrayElement() {
+            return new ArrayElementsBuilder<>(aedb -> {
+                return new AssignmentBuilder<>(assig -> {
+                    addStatement(new StatementWrapper(assig));
+                    return cast();
+                }, aedb);
+            });
+        }
+
+        public ArrayElementsBuilder<AssignmentBuilder<B>> assignArrayElement(Object first) {
+            return new ArrayElementsBuilder<AssignmentBuilder<B>>(aedb -> {
+                return new AssignmentBuilder<>(assig -> {
+                    addStatement(new StatementWrapper(assig));
+                    return cast();
+                }, aedb);
+            }).element(first.toString());
+        }
+
         public B assign(String variable, Consumer<? super AssignmentBuilder<?>> c) {
             boolean[] closed = new boolean[1];
             AssignmentBuilder<Void> ab = new AssignmentBuilder<>(b -> {
@@ -5888,25 +6214,22 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public ArrayLiteralBuilder<T> initializedAsNewArray(String type) {
             return new ArrayLiteralBuilder<>(alb -> {
-                as = new Composite(alb.type, new BackupRaw("[]"));
+                as = typeAndDimensions(alb);
                 initializer = alb;
                 return converter.apply(this);
             }, type);
         }
 
-        public T initializedAsNewArray(String action, Consumer<? super ArrayLiteralBuilder<?>> c) {
+        public T initializedAsNewArray(String arrayType, Consumer<? super ArrayLiteralBuilder<?>> c) {
             Holder<T> holder = new Holder<>();
             ArrayLiteralBuilder<Void> bldr = new ArrayLiteralBuilder<>(alb -> {
-                as = new Composite(alb.type, new BackupRaw("[]"));
+                as = typeAndDimensions(alb);
                 initializer = alb;
                 holder.set(converter.apply(this));
                 return null;
-            }, action);
+            }, arrayType);
             c.accept(bldr);
-            if (!holder.isSet()) {
-                throw new IllegalStateException("Array not closed");
-            }
-            return holder.get();
+            return holder.get(() -> bldr.closeArrayLiteral());
         }
     }
 
@@ -7371,7 +7694,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         private ArrayLiteralBuilder<T> initializedAsArrayLiteral(String type, boolean[] built) {
             return new ArrayLiteralBuilder<>(alb -> {
-                this.type = new Composite(alb.type, new BackupRaw("[]"));
+                this.type = typeAndDimensions(alb);
                 initializer = alb;
                 built[0] = true;
                 return converter.apply(this);
@@ -7402,7 +7725,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             boolean[] built = new boolean[1];
             Holder<T> t = new Holder<>();
             ArrayLiteralBuilder<Void> bldr = new ArrayLiteralBuilder<>(alb -> {
-                this.type = new Composite(alb.type, new BackupRaw("[]"));
+                this.type = typeAndDimensions(alb);
                 this.initializer = alb;
                 built[0] = true;
                 t.set(converter.apply(this));
