@@ -439,6 +439,60 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }, true);
     }
 
+    public static final class AnnotatedArgumentBuilder<T> implements BodyBuilder {
+
+        private final List<BodyBuilder> annotations = new ArrayList<>();
+        private final Function<BodyBuilder, T> converter;
+
+        AnnotatedArgumentBuilder(Function<BodyBuilder, T> converter) {
+            this.converter = converter;
+        }
+
+        public AnnotatedArgumentBuilder<T> annotatedWith(String type, Consumer<AnnotationBuilder<?>> c) {
+            Holder<AnnotatedArgumentBuilder<T>> hold = new Holder<>();
+            AnnotationBuilder<Void> bldr = new AnnotationBuilder<Void>(ab -> {
+                annotations.add(ab);
+                hold.set(this);
+                return null;
+            }, type);
+            c.accept(bldr);
+            return hold.get("Annotated arg builder for " + type + " was not closed");
+        }
+
+        public AnnotationBuilder<AnnotatedArgumentBuilder<T>> annotatedWith(String type) {
+            return new AnnotationBuilder<AnnotatedArgumentBuilder<T>>(ab -> {
+                annotations.add(ab);
+                return this;
+            }, type);
+        }
+
+        public T ofType(String type) {
+            checkIdentifier(type);
+            List<BodyBuilder> all = new ArrayList<>(annotations);
+            all.add(new Adhoc(type));
+            return converter.apply(new Composite(all.toArray(new BodyBuilder[all.size()])));
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+
+        }
+    }
+
+    public static final class ParameterNameBuilder<T> {
+
+        private final Function<String, T> converter;
+
+        public ParameterNameBuilder(Function<String, T> converter) {
+            this.converter = converter;
+        }
+
+        public T named(String name) {
+            checkIdentifier(name);
+            return converter.apply(name);
+        }
+    }
+
     static final class Composite implements BodyBuilder {
 
         private final BodyBuilder[] contents;
@@ -549,7 +603,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private final Function<ConstructorBuilder<T>, T> converter;
         private BlockBuilder<?> body;
         private final Set<AnnotationBuilder<?>> annotations = new LinkedHashSet<>();
-        private final Map<String, BodyBuilder> arguments = new LinkedHashMap<>();
+        private final Map<BodyBuilder, BodyBuilder> arguments = new LinkedHashMap<>();
         private final Set<Modifier> modifiers = EnumSet.noneOf(Modifier.class);
         private final Set<String> throwing = new TreeSet<>();
 
@@ -588,8 +642,32 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public ConstructorBuilder<T> addArgument(String type, String name) {
-            arguments.put(checkIdentifier(notNull("name", name)), parseTypeName(type));
+            arguments.put(new Adhoc(checkIdentifier(notNull("name", name))), parseTypeName(type));
             return this;
+        }
+
+        public AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>> addAnnotatedArgument(String annotationType) {
+            return new AnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>(
+                    annotationsAndType -> {
+                        return new ParameterNameBuilder<ConstructorBuilder<T>>(name -> {
+                            arguments.put(new Adhoc(name), annotationsAndType);
+                            return this;
+                        });
+                    }).annotatedWith(annotationType);
+        }
+
+        public ConstructorBuilder<T> addAnnotatedArgument(String annotationType, Consumer<AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>>> c) {
+            Holder<ConstructorBuilder<T>> hold = new Holder<>();
+            AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>> bldr = new AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>(
+                    annotationsAndType -> {
+                        return new ParameterNameBuilder<Void>(name -> {
+                            arguments.put(new Adhoc(name), annotationsAndType);
+                            hold.set(this);
+                            return null;
+                        });
+                    }).annotatedWith(annotationType);
+            c.accept(bldr);
+            return hold.get("Annotated argument builder not completed");
         }
 
         public T body(Consumer<? super BlockBuilder<?>> c) {
@@ -632,10 +710,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
         @Override
         public void buildInto(LinesBuilder lines) {
             lines.parens(lb -> {
-                for (Iterator<Map.Entry<String, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                    Map.Entry<String, BodyBuilder> e = it.next();
+                for (Iterator<Map.Entry<BodyBuilder, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                    Map.Entry<BodyBuilder, BodyBuilder> e = it.next();
                     e.getValue().buildInto(lb);
-                    lb.word(e.getKey());
+                    e.getKey().buildInto(lb);
                     if (it.hasNext()) {
                         lb.appendRaw(",");
                     }
@@ -722,10 +800,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         private String sig() {
             LinesBuilder lb = new LinesBuilder();
-            for (Iterator<Map.Entry<String, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                Map.Entry<String, BodyBuilder> e = it.next();
+            for (Iterator<Map.Entry<BodyBuilder, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                Map.Entry<BodyBuilder, BodyBuilder> e = it.next();
                 e.getValue().buildInto(lb);
-                lb.word(e.getKey());
+                e.getKey().buildInto(lb);
                 if (it.hasNext()) {
                     lb.appendRaw(',');
                 }
@@ -3034,6 +3112,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             Holder<B> holder = new Holder<>();
             ValueExpressionBuilder<Void> result = new ValueExpressionBuilder<>(veb -> {
                 arguments.add(veb);
+                holder.set(cast());
                 return null;
             });
             consumer.accept(result);

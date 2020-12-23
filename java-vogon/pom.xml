@@ -7,6 +7,7 @@
         <artifactId>annotation-tools-parent</artifactId>
         <version>2.7.1</version>
     </parent>
+    <version>2.7.1.1</version>
     <artifactId>java-vogon</artifactId>
     <url>https://github.com/timboudreau/annotation-tools</url>
     <issueManagement>
