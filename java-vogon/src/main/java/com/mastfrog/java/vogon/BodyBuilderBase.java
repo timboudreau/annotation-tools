@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2020 Mastfrog Technologies.
+ * Copyright 2021 Mastfrog Technologies.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,27 +27,12 @@ package com.mastfrog.java.vogon;
  *
  * @author Tim Boudreau
  */
- enum BitwiseOperators implements ClassBuilder.Operator {
-    OR("|"), AND("&"), XOR("^"), COMPLEMENT("~"), SHIFT_LEFT("<<"), SHIFT_RIGHT(">>"), ROTATE(">>>");
-    private final String stringRep;
-
-    private BitwiseOperators(String stringRep) {
-        this.stringRep = stringRep;
-    }
-
-    @Override
-    public void buildInto(LinesBuilder lines) {
-        lines.word(toString() + " ");
-    }
+abstract class BodyBuilderBase implements BodyBuilder {
 
     @Override
     public String toString() {
-        return stringRep;
+        LinesBuilder lb = new LinesBuilder();
+        buildInto(lb);
+        return lb.toString();
     }
-
-    @Override
-    public boolean applicableTo(Number num) {
-        return num instanceof Integer || num instanceof Long;
-    }
-
 }

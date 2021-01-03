@@ -61,7 +61,7 @@ public class ArraysTest {
             });
 
             bb.invoke("println")
-                    .withArgumentFromInvoking("charAt").onNew("StringBuilder").withArgumentFromInvoking("toString")
+                    .withArgumentFromInvoking("charAt").onNew().withArgumentFromInvoking("toString")
                     .withArgument("matrix").on("Arrays").ofType("String")
                     .onField("out")
                     .of("System");

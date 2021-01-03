@@ -144,6 +144,37 @@ public class LinesBuilder {
         return this;
     }
 
+    public LinesBuilder multiCase(Consumer<LinesBuilder> c, String... cases) {
+        if (cases.length == 0) {
+            return this;
+        }
+        maybeNewline();
+        for (int i = 0; i < cases.length; i++) {
+            String on = cases[i];
+            boolean last = i == cases.length - 1;
+            if (i > 0) {
+                onNewLine();
+            }
+            if (on == null || "*".equals(on)) {
+                word("default");
+            } else {
+                word("case");
+                word(on);
+            }
+            word(":");
+            if (last) {
+                currIndent++;
+                try {
+                    sb.append(newlineIndentChars());
+                    c.accept(this);
+                } finally {
+                    currIndent--;
+                }
+            }
+        }
+        return this;
+    }
+
     private String wrapPrefix;
 
     public char lastNonWhitespaceChar() {
@@ -189,6 +220,19 @@ public class LinesBuilder {
         boolean old = hr;
         hr = true;
         c.accept(this);
+        hr = old;
+    }
+
+    void doubleHangingWrap(Consumer<LinesBuilder> c) {
+        boolean old = hr;
+        hr = true;
+//        if (!old) {
+        currIndent += 2;
+//        }
+        hangingWrap(c);
+//        if (!old) {
+        currIndent -= 2;
+//        }
         hr = old;
     }
 
