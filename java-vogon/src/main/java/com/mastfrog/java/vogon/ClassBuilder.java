@@ -1853,7 +1853,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         /**
-         * Add a final varargs argument and open the body of this method for writing.
+         * Add a final varargs argument and open the body of this method for
+         * writing.
          *
          * @param type The type, which will get "..." appended to it in code
          * @param name The name
@@ -1867,7 +1868,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         /**
-         * Add a final varargs argument and open the body of this method for writing.
+         * Add a final varargs argument and open the body of this method for
+         * writing.
          *
          * @param type The type, which will get "..." appended to it in code
          * @param name The name
@@ -3069,6 +3071,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             Holder<T> holder = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
                 this.on = nb;
+                holder.set(converter.apply(cast()));
                 return null;
             });
             c.accept(result);
@@ -3850,8 +3853,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public void buildInto(LinesBuilder lines) {
             lines.word("catch ");
             lines.parens(lb -> {
-                types.buildInto(lb);
-                lb.word(exceptionName);
+                lines.hangingWrap(lb1 -> {
+                    types.buildInto(lb1);
+                    lb1.word(exceptionName);
+                });
             });
             super.buildInto(lines);
         }
@@ -4732,6 +4737,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private final Function<ValueExpressionBuilder<T>, T> converter;
         private boolean parenthesized;
         private boolean newline;
+        private Composite cast;
 
         ValueExpressionBuilder(Function<ValueExpressionBuilder<T>, T> converter) {
             this.converter = converter;
@@ -4887,7 +4893,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public ValueExpressionBuilder<T> castTo(String type) {
             BodyBuilder typeBody = parseTypeName(type);
-            value = new Composite(new Punctuation('('), typeBody, new Punctuation(')'));
+            cast = new Composite(new Punctuation('('), typeBody, new Punctuation(')'));
             return this;
         }
 
@@ -5167,8 +5173,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 lines.onNewLine();
             }
             if (parenthesized) {
+                if (cast != null) {
+                    cast.buildInto(lines);
+                }
                 lines.parens(value::buildInto);
             } else {
+                if (cast != null) {
+                    cast.buildInto(lines);
+                }
                 value.buildInto(lines);
             }
         }
@@ -5270,14 +5282,16 @@ public final class ClassBuilder<T> implements BodyBuilder {
         @Override
         public void buildInto(LinesBuilder lines) {
             if (tailCondition) {
-                lines.word("do");
+                lines.onNewLine().word("do");
                 super.buildInto(lines);
                 lines.word("while");
                 lines.parens(condition::buildInto);
+                lines.onNewLine();
             } else {
-                lines.word("while");
+                lines.onNewLine().word("while");
                 lines.parens(condition::buildInto);
                 super.buildInto(lines);
+                lines.onNewLine();
             }
         }
     }
@@ -5383,6 +5397,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public NewBuilder<T> returningNew() {
             return new NewBuilder<>(nb -> {
+                addDebugStackTraceElementComment();
                 addStatement(new ReturnStatement(nb));
                 return endBlock();
             });
@@ -6179,8 +6194,56 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public B returning(String s) {
+            addDebugStackTraceElementComment();
             addStatement(new ReturnStatement(new Adhoc(s)));
             return cast();
+        }
+
+        /**
+         * Convenience method for returning <code>this</code>.
+         *
+         * @return this
+         */
+        public B returningThis() {
+            addDebugStackTraceElementComment();
+            addStatement(new ReturnStatement(new Adhoc("this")));
+            return cast();
+        }
+
+        /**
+         * Adds a return statement to this block <i>without closing it</i> -
+         * this is needed by IfBuilder and friends, where you may still want to
+         * add an else clause, so you want to get back this instance, not the
+         * thing its build method creates.
+         *
+         * @return A NewBuilder
+         */
+        public NewBuilder<B> conditionallyReturningNew() {
+            return new NewBuilder<>(nb -> {
+                addDebugStackTraceElementComment();
+                addStatement(new ReturnStatement(nb));
+                return cast();
+            });
+        }
+
+        /**
+         * Adds a return statement to this block <i>without closing it</i> -
+         * this is needed by IfBuilder and friends, where you may still want to
+         * add an else clause, so you want to get back this instance, not the
+         * thing its build method creates.
+         *
+         * @return A NewBuilder
+         */
+        public B conditionallyReturningNew(Consumer<NewBuilder<?>> c) {
+            Holder<B> hold = new Holder<>();
+            NewBuilder<Void> result = new NewBuilder<>(nb -> {
+                addDebugStackTraceElementComment();
+                addStatement(new ReturnStatement(nb));
+                hold.set(cast());
+                return null;
+            });
+            c.accept(result);
+            return hold.get("New builder not completed");
         }
 
         public ConditionBuilder<B> returningBoolean() {
@@ -7003,8 +7066,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return result;
         }
 
+        private static final ThreadLocal<Boolean> BUILDING_CONDITION = ThreadLocal.withInitial(() -> false);
+
         @Override
         public void buildInto(LinesBuilder lines) {
+            boolean entry = !BUILDING_CONDITION.get();
+            if (entry) {
+                BUILDING_CONDITION.set(true);
+            }
             Consumer<LinesBuilder> cb = (lb) -> {
                 if (negated) {
                     lines.appendRaw('!');
@@ -7017,16 +7086,29 @@ public final class ClassBuilder<T> implements BodyBuilder {
                     doBuildInto(lines);
                 }
             };
-            if (parenthesized) {
-                lines.parens(cb);
+            Consumer<LinesBuilder> c = lb -> {
+                if (parenthesized) {
+                    lb.parens(cb);
+                } else {
+                    cb.accept(lb);
+                }
+            };
+            if (entry) {
+                lines.doubleHangingWrap(c);
             } else {
-                cb.accept(lines);
+                c.accept(lines);
+            }
+            if (entry) {
+                BUILDING_CONDITION.set(false);
             }
         }
 
         private void doBuildInto(LinesBuilder lines) {
             if (prev != null) {
                 prev.buildInto(lines);
+                int remainingLength = clause.toString().length()
+                        + (op == null ? 0 : op.toString().length() + 1);
+                lines.hintLineBreak(remainingLength);
                 if (op != null) {
                     op.buildInto(lines);
                 } else {

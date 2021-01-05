@@ -59,6 +59,11 @@ public class LinesBuilder {
         return c;
     }
 
+    public LinesBuilder hintLineBreak(int pendingChars) {
+        maybeIndent(pendingChars, this.hr);
+        return this;
+    }
+
     private void maybeIndent(int pendingChars, boolean hanging) {
         if (currLineLength() + pendingChars > maxLineLength && !isOnNewLine()) {
             sb.append(newlineIndentChars());
