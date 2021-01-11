@@ -2296,9 +2296,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 sb.append('<');
                 items.add(OPEN_ANGLE);
             } else if (t < lastDepth) {
-                sb.append('>');
-                items.add(CLOSE_ANGLE);
-                closeDepth(lastDepth);
+                for (int i = lastDepth; i > t; i--) {
+                    sb.append('>');
+                    items.add(CLOSE_ANGLE);
+                    closeDepth(i);
+                }
             }
             lastDepth = t;
             add(t, u);
@@ -4053,6 +4055,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return with().literal(stringLiteral);
         }
 
+        public StringConcatenationBuilder<T> append(char charLiteral) {
+            return with().literal(charLiteral);
+        }
+
         public StringConcatenationBuilder<T> append(int intLiteral) {
             return with().literal(intLiteral);
         }
@@ -4083,6 +4089,22 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public StringConcatenationBuilder<T> appendExpression(String expression) {
             return with().expression(expression);
+        }
+
+        public InvocationBuilder<StringConcatenationBuilder<T>> appendInvocationOf(String ofMethod) {
+            return with().invoke(ofMethod);
+        }
+
+        public StringConcatenationBuilder<T> appendInvocationOf(String ofMethod, Consumer<InvocationBuilder<?>> c) {
+            return with().invoke(ofMethod, c);
+        }
+
+        public FieldReferenceBuilder<StringConcatenationBuilder<T>> appendField(String fieldName) {
+            return with().field(fieldName);
+        }
+
+        public StringConcatenationBuilder<T> appendField(String fieldName, Consumer<FieldReferenceBuilder<?>> c) {
+            return with().field(fieldName, c);
         }
 
         public T endConcatenation() {
@@ -4150,14 +4172,79 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return (N) this;
         }
 
+        /**
+         * Wrap this expression in parentheses.
+         *
+         * @return this
+         */
         public N parenthesized() {
             this.parenthesized = true;
             return cast();
         }
 
+        /**
+         * Cast the result of this expression.
+         *
+         * @param cast The type to cast to
+         * @return A numeric type
+         */
         public N castTo(NumericCast cast) {
             this.castTo = cast;
             return cast();
+        }
+
+        /**
+         * Cast to int.
+         *
+         * @return this
+         */
+        public N asInt() {
+            return castTo(NumericCast.INTEGER);
+        }
+
+        /**
+         * Cast to long.
+         *
+         * @return this
+         */
+        public N asLong() {
+            return castTo(NumericCast.LONG);
+        }
+
+        /**
+         * Cast to short.
+         *
+         * @return this
+         */
+        public N asShort() {
+            return castTo(NumericCast.SHORT);
+        }
+
+        /**
+         * Cast to byte.
+         *
+         * @return this
+         */
+        public N asByte() {
+            return castTo(NumericCast.BYTE);
+        }
+
+        /**
+         * Cast to float.
+         *
+         * @return this
+         */
+        public N asFloat() {
+            return castTo(NumericCast.FLOAT);
+        }
+
+        /**
+         * Cast to double.
+         *
+         * @return this
+         */
+        public N asDouble() {
+            return castTo(NumericCast.DOUBLE);
         }
 
         ValueExpressionBuilder<F> valueBuilder(Operator op) {
@@ -4284,6 +4371,83 @@ public final class ClassBuilder<T> implements BodyBuilder {
          */
         public ValueExpressionBuilder<F> modulo() {
             return valueBuilder(Operators.MODULO);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>OR</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> bitwiseOr() {
+            return valueBuilder(BitwiseOperators.OR);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>AND</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> bitwiseAnd() {
+            return valueBuilder(BitwiseOperators.AND);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>XOR</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> bitwiseXor() {
+            return valueBuilder(BitwiseOperators.XOR);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>XOR</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> bitwiseComplement() {
+            return valueBuilder(BitwiseOperators.COMPLEMENT);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>XOR</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> rotateBy() {
+            return valueBuilder(BitwiseOperators.ROTATE);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>XOR</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> shiftLeftBy() {
+            return valueBuilder(BitwiseOperators.SHIFT_LEFT);
+        }
+
+        /**
+         * Create a builder for the right side value of this expression, which
+         * will be bitwise <code>XOR</code>'d with the left side.
+         *
+         * @return A value builder to create the right-side value for the
+         * expression
+         */
+        public ValueExpressionBuilder<F> shiftRightBy() {
+            return valueBuilder(BitwiseOperators.SHIFT_LEFT);
         }
     }
 
@@ -8332,7 +8496,51 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }
             return Objects.equals(this.arguments, other.arguments);
         }
+    }
 
+    private List<FieldBuilder<?>> fields() {
+        List<FieldBuilder<?>> all = new ArrayList<>();
+        for (BodyBuilder bb : members) {
+            if (bb instanceof FieldBuilder<?>) {
+                all.add((FieldBuilder<?>) bb);
+            }
+        }
+        return all;
+    }
+
+    /**
+     * Generate an implementation of <code>toString()</code> that simply
+     * iterates all fields added and concatenates them.
+     *
+     * @return this
+     */
+    public ClassBuilder<T> autoToString() {
+        members.add(BodyBuilder.lazy(() -> {
+            MethodBuilder<Object> mb = new MethodBuilder<>(x -> {
+                return null;
+            }, "toString", Modifier.PUBLIC)
+                    .returning("String")
+                    .annotatedWith("Override").closeAnnotation();
+            BlockBuilder<Object> bb = mb.body();
+            StringConcatenationBuilder<Object> scb = bb.returningValue().stringConcatenation().literal(className()).append('(');
+            List<FieldBuilder<?>> flds = fields();
+            if (flds.isEmpty()) {
+                scb.append("-empty-");
+            }
+            // do not use char appends here or they can result in adding
+            // to an int if one precedes it
+            for (Iterator<FieldBuilder<?>> it = fields().iterator(); it.hasNext();) {
+                FieldBuilder fb = it.next();
+                scb.append(fb.name).append("=").appendExpression("this." + fb.name);
+                if (it.hasNext()) {
+                    scb.append(", ");
+                }
+            }
+            scb.append(")");
+            scb.endConcatenation();
+            return mb;
+        }));
+        return this;
     }
 
     public static final class FieldBuilder<T> extends BodyBuilderBase {

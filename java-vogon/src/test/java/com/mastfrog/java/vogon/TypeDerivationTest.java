@@ -49,12 +49,35 @@ public class TypeDerivationTest {
 
         List<String> expected = parts(sig);
 
-        System.out.println("EXP: " + expected);
-
         List<String> got = parts(g);
 
         assertEquals(expected, got);
+    }
 
+    @Test
+    public void testBug2() {
+        String listSpec = "Map<List<Class<?>>, Foo>";
+        GenericTypeVisitor v = new GenericTypeVisitor();
+        ClassBuilder.visitGenericTypes(listSpec, 0, v);
+        String[] exp = new String[] {"Map", "List", "Class", "?", "Foo"};
+        int[] depths = new int[]  {0,1,2,3,1};
+        int[] cur = new int[1];
+        ClassBuilder.visitGenericTypes(listSpec, 0, (depth, str) -> {
+            int cursor = cur[0]++;
+            assertEquals(exp[cursor], str);
+            assertEquals(depths[cursor], depth);
+        });
+        ClassBuilder<String> cb = ClassBuilder.forPackage("com.foo").named("Bar")
+                .field("wunk").ofType(listSpec);
+        assertTrue(cb.build().contains(listSpec), "List spec '" + listSpec + "' not found in class " + cb);
+    }
+
+    @Test
+    public void testBug3() {
+        String listSpec = "Consumer<? super SortPropertyBuilder<SingleTestCaseMaterializedViewBuilder<$Ret>>>";
+        ClassBuilder<String> cb = ClassBuilder.forPackage("com.foo").named("Bar")
+                .field("wunk").ofType(listSpec);
+        assertTrue(cb.toString().contains(listSpec));
     }
 
     @Test
@@ -71,11 +94,7 @@ public class TypeDerivationTest {
         String g = lb.toString();
 
         List<String> expected = parts(nm);
-
-        System.out.println("EXP: " + expected);
-
         List<String> got = parts(g);
-
         assertEquals(expected, got);
     }
 
@@ -90,8 +109,6 @@ public class TypeDerivationTest {
         bb.buildInto(lb);
 
         String g = lb.toString();
-
-        System.out.println("G IS '" + g + "'");
         assertFalse(g.trim().endsWith(","), g);
     }
 
