@@ -2,11 +2,37 @@ Java Vogon
 ==========
 
 Generated code that's intuitive to create, and looks like it was written by 
-a tasteful human.
+a human.
 
 _Java Vogon_ is Java code generation library that deeply supports the 
 structures commonly used in Java code, with an intuitive builder-based API,
 which outputs neat, well-formatted code.
+
+Code that generates code can be hard-to-maintain. With Java Vogon, it 
+reads like a sentence:
+
+```java
+methodBody.declare("expected")
+          .initializedByInvoking("now")
+          .on("Instant")
+          .as("Instant");
+
+methodBody.declare("got")
+          .initializedByInvoking("getStartTimeAsInstant")
+          .on("someInstance")
+          .as("Instant");
+
+methodBody.invoke("assertEquals")
+          .withArgumentFromInvoking("toEpochMilli")
+          .on("expected")
+          .withArgumentFromInvoking("toEpochMilli")
+          .on("got")
+          .inScope(); // statically imported
+```
+
+
+Lambda vs. Imperative Styles
+----------------------------
 
 Most code-shapes can be created either using an imperative or lambda style - 
 for writing something small, the terse imperative form may be more readable;
@@ -27,10 +53,10 @@ ClassBuilder<String> classBuilder = ClassBuilder.forPackage("com.foo")
 classBuilder.overridePublic("test").addArgument("int", "value")
     .bodyReturning("value % 2 != 0");
 
-classBuilder.overridePublic("test2", mb -> {
-    mb.addArgument("int", "value")
-            .body(bb -> {
-                bb.returning("value % 2 != 0");
+classBuilder.overridePublic("test2", method -> {
+    method.addArgument("int", "value")
+            .body(body -> {
+                body.returning("value % 2 != 0");
             });
 });
 ```
@@ -64,14 +90,14 @@ a method - there is one and only one thing you're invoking it on,
 so let that be the terminus of defining an invocation, and simply return
 the code-block you were adding it to:
 
-```
+```java
 block.invoke("print").withStringLiteral("Hello ").on("System");
 block.invoke("print").withArgumentFromInvoking("getProperty").withStringLiteral("user.name").on("System").on("System");
 ```
 
 or
 
-```
+```java
 block.declare("userName").initializedByInvoking("getProperty").withStringLiteral("user.name").on("System").as("String");
 ```
 
@@ -128,11 +154,11 @@ block.invoke("foo", ib -> {
    In a few cases, the framework actually can make a resonable guess as to what you were
    trying to do - for example:
 
-```
+```java
 block.declare("sb").initializedWithNew(nue -> {
     nue.withArgument("data:").ofType("StringBuilder");
 });
-``
+```
 
    _should_ and with `.as("StringBuilder")` - the framework doesn't _know_ that you don't
    intend to declare it as `CharSequence` or even `Object` - but it does know that it
@@ -163,7 +189,11 @@ blocks, adding various kinds of class elements or statements) will be
 preceded by a line comment showing the class, method and line number in _your_
 code that added that element.  You can also embed debug logging using
 `BlockBuilder.debugLog(String)`, which will be generated only when debug
-mode is enabled.
+mode is enabled.  These comments look like
+
+```java
+// generateOneBuilderTest(TestGenerator.java:860)
+```
 
 Logging
 -------
