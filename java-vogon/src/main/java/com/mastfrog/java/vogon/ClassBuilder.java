@@ -3680,7 +3680,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static final class TryBuilder<T> extends BlockBuilderBase<T, TryBuilder<T>> {
+    public static final class TryBuilder<T> extends BlockBuilderBase<T, TryBuilder<T>, T> {
 
         final List<CatchBuilder<?>> catches = new ArrayList<>();
         private BodyBuilder finallyBlock;
@@ -3689,6 +3689,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public TryBuilder(Function<? super BodyBuilder, T> converter) {
             super(converter, true);
+        }
+
+        @Override
+        T x() {
+            return converter.apply(this);
         }
 
         @Override
@@ -3775,7 +3780,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static final class CatchBuilder<T> extends BlockBuilderBase<T, CatchBuilder<T>> {
+    public static final class CatchBuilder<T> extends BlockBuilderBase<T, CatchBuilder<T>, T> {
 
         private static final String DEFAULT_EX_NAME = "thrown";
         private String exceptionName = DEFAULT_EX_NAME;
@@ -3786,6 +3791,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
             super(convert, true);
             this.parent = parent;
             this.types = types;
+        }
+
+        @Override
+        T x() {
+            return converter.apply(this);
         }
 
         public T endTryCatch() {
@@ -5389,10 +5399,15 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static class BlockBuilder<T> extends BlockBuilderBase<T, BlockBuilder<T>> {
+    public static class BlockBuilder<T> extends BlockBuilderBase<T, BlockBuilder<T>, T> {
 
         BlockBuilder(Function<? super BlockBuilder<T>, T> converter, boolean openBlock) {
             super(converter, openBlock);
+        }
+
+        @Override
+        T x() {
+            return converter.apply(this);
         }
 
         @Override
@@ -5401,14 +5416,19 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static class WhileBuilder<T> extends BlockBuilderBase<T, WhileBuilder<T>> {
+    public static class WhileBuilder<T> extends BlockBuilderBase<T, WhileBuilder<T>, WhileBuilder<T>> {
 
         private final boolean tailCondition;
         private BodyBuilder condition;
 
-        WhileBuilder(boolean tail, Function<? super BlockBuilderBase<T, WhileBuilder<T>>, T> converter) {
+        WhileBuilder(boolean tail, Function<? super BlockBuilderBase<T, WhileBuilder<T>, WhileBuilder<T>>, T> converter) {
             super(converter, true);
             this.tailCondition = tail;
+        }
+
+        @Override
+        WhileBuilder<T> x() {
+            return this;
         }
 
         public ConditionBuilder<T> underCondition() {
@@ -5460,7 +5480,24 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static class BlockBuilderBase<T, B extends BlockBuilderBase<T, B>> extends BodyBuilderBase {
+    /**
+     * Base class for code-block builders, which include basic code blocks such as
+     * method bodies, and subtypes which add purpose-specific methods such as
+     * <code>TryBuilder</code>, <code>IfBuilder</code>, <code>ElseBuilder</code>.
+     * <p>
+     * Some subtypes vary the return type of some methods based on their purpose - some
+     * "return" methods make sense, in a method body, to be treated as a signal to close
+     * the block and add it to its parent class.  Others, such as <code>IfBuilder</code>
+     * would cause any return statement to make it impossible to add further else clauses,
+     * so return methods on that return themselves.
+     * </p>
+     *
+     * @param <T> The return type when this block is built - the parent builder.
+     * @param <B> Self-type
+     * @param <X> The return type for methods which, under some circumstances should
+     * close the builder, where which that does not make sense for all subtypes.
+     */
+    public static abstract class BlockBuilderBase<T, B extends BlockBuilderBase<T, B, X>, X> extends BodyBuilderBase {
 
         final List<BodyBuilder> statements = new LinkedList<>();
         final Function<? super B, T> converter;
@@ -5472,6 +5509,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
             this.openBlock = openBlock;
             addDebugStackTraceElementComment();
         }
+
+        abstract X x();
 
         private void addDebugStackTraceElementComment() {
             if (CONTEXT.get() != null) {
@@ -6448,22 +6487,22 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }, method);
         }
 
-        public T returningInvocationOf(String method, Consumer<? super InvocationBuilder<?>> c) {
+        public X returningInvocationOf(String method, Consumer<? super InvocationBuilder<?>> c) {
             boolean[] built = new boolean[1];
-            Holder<T> holder = new Holder<>();
-            InvocationBuilder<T> b = new InvocationBuilder<>(ib -> {
+            Holder<X> holder = new Holder<>();
+            InvocationBuilder<Void> b = new InvocationBuilder<>(ib -> {
                 addDebugStackTraceElementComment();
                 addStatement(new ReturnStatement(ib));
                 built[0] = true;
-                T result = this.converter.apply(cast());
+                X result = x();
                 holder.set(result);
-                return result;
+                return null;
             }, method);
             c.accept(b);
             if (!built[0]) {
                 b.inScope();
             }
-            T result = holder.get("Invocation builder not completed - call"
+            X result = holder.get("Invocation builder not completed - call"
                     + "inScope() or on()");
             return result;
         }
@@ -6975,10 +7014,15 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static final class ElseClauseBuilder<T> extends BlockBuilderBase<T, ElseClauseBuilder<T>> {
+    public static final class ElseClauseBuilder<T> extends BlockBuilderBase<T, ElseClauseBuilder<T>, ElseClauseBuilder<T>> {
 
         ElseClauseBuilder(Function<? super ElseClauseBuilder<T>, T> converter, boolean openBlock) {
             super(converter, openBlock);
+        }
+
+        @Override
+        ElseClauseBuilder<T> x() {
+            return this;
         }
 
         public T endIf() {
@@ -6986,9 +7030,9 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    public static final class IfBuilder<T> extends BlockBuilderBase<T, IfBuilder<T>> {
+    public static final class IfBuilder<T> extends BlockBuilderBase<T, IfBuilder<T>, IfBuilder<T>> {
 
-        private BlockBuilderBase<?, ?> finalElse;
+        private BlockBuilderBase<?, ?, ?> finalElse;
         private final List<Pair<BodyBuilder, IfBuilder<?>>> clausePairs = new ArrayList<>();
 
         IfBuilder(Function<? super IfBuilder<T>, T> converter, BodyBuilder condition) {
@@ -7006,6 +7050,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
             super(converter, true);
             clausePairs.addAll(orig.clausePairs);
             clausePairs.add(new Pair<>(condition, this));
+        }
+
+        @Override
+        IfBuilder<T> x() {
+            return this;
         }
 
         public T elseIf(Consumer<? super ConditionBuilder<? extends IfBuilder<?>>> c) {
