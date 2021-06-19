@@ -154,11 +154,14 @@ Code generation methods generally come in two forms:
 e.g. `classBuilder.method("getFoo").returning("String").body().returningStringLiteral("foo").endBlock()`
  * _Consumer-Based_ - the method takes a `Consumer` and perhaps some other argument;  the consumer must
 complete the builder it is passed (immediately), e.g. 
-```classBuilder.overridePublic("getFoo", mb -> {
+
+```
+classBuilder.overridePublic("getFoo", mb -> {
     mb.returning("String").body (bb -> {
         bb.returningStringLiteral("foo");
     });
-});```
+});
+```
 
 Choosing which to use is usually a matter of preference and readability, but there are some differences:
 
