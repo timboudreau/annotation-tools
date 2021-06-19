@@ -433,6 +433,7 @@ public final class AnnotationMirrorMemberTestBuilder<T> extends AbstractPredicat
         List<String> types = utils.typeList(mir, memberName);
         List<TypeMirror> els = new ArrayList<>(types.size());
         types.forEach((type) -> {
+type = type.replace('$', '.');
             TypeElement te = utils.processingEnv().getElementUtils().getTypeElement(type);
             if (te != null) {
                 els.add(te.asType());
