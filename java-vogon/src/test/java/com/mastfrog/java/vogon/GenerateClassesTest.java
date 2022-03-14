@@ -34,10 +34,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.lang.reflect.UndeclaredThrowableException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -56,6 +58,7 @@ import java.util.logging.Level;
 import javax.lang.model.element.Modifier;
 import static javax.lang.model.element.Modifier.FINAL;
 import static javax.lang.model.element.Modifier.PUBLIC;
+import static javax.lang.model.element.Modifier.STATIC;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaCompiler;
@@ -96,70 +99,74 @@ public class GenerateClassesTest {
 
     @Test
     public void testLambdasAndAnnotations() throws Throwable {
-        IAnnotationsAndLambdas proxy = loadAndCreateProxy("AnnotationsAndLambdas", IAnnotationsAndLambdas.class);
-        assertNotNull(proxy);
-        assertNotNull(lastProxied);
-        Annotation[] annos = lastProxied.getClass().getAnnotations();
-        assertNotEquals(0, annos.length, "No annotations found");
-        for (Annotation a : annos) {
-            System.out.println("A: " + a);
-        }
-        assertEquals(1, annos.length);
-        String annoString = annos[0].toString();
-        // JDK in continuous build apparently doesn't quote strings in annotations?
-        assertEquals("@com.mastfrog.java.vogon.test.SomeAnnotation(value=Hoober, thing=56)", 
-                annoString.replace("\"", ""));
-        assertEquals(0, proxy.lastValue());
-
-        assertTrue(proxy.time() <= System.currentTimeMillis());
-        assertTrue(proxy.time2() <= System.currentTimeMillis());
-
-        proxy.doSomething(val -> {
-            assertTrue(val instanceof Integer);
-            assertEquals(-3036, val);
-        });
-        Consumer<Integer> c = proxy.getDoerOfSomething((short) 7397);
-        assertEquals(0, proxy.lastValue());
-        c.accept(100);
-        assertEquals(-976404, proxy.lastValue());
-        Object[] stuff = proxy.getStuff();
-
-        assertFalse(proxy.notBool(), srcMessage("If statement was not negated", "AnnotationsAndLambdas",
-                "notBool", "privvy"));
-
-        for (int i = 0; i < stuff.length; i++) {
-//            System.out.println(i + ".\t" + stuff[i].getClass().getName() + "\t" + stuff[i]);
-            Object o = stuff[i];
-            switch (i) {
-                case 0:
-                    assertTrue(o instanceof Long);
-                    assertTrue(System.currentTimeMillis() >= ((Long) o));
-                    break;
-                case 1:
-                    assertEquals(Double.valueOf(1), o);
-                    break;
-                case 2:
-                    assertTrue(o instanceof StringBuilder);
-                    assertEquals("Hello world", o.toString());
-                    break;
-                case 3:
-                    assertEquals(Short.valueOf((short) 23), o);
-                    break;
-                case 4:
-                    assertEquals(Integer.valueOf(70), o);
-                    break;
-                case 5:
-                    assertEquals("Hello-" + Locale.getDefault(), o);
-                    break;
-                case 6:
-                    assertEquals(Character.valueOf('x'), o);
-                    break;
-                case 7:
-                    Assertions.assertArrayEquals(new int[]{1}, (int[]) o);
-                    break;
-                default:
-                    fail("Too many elements");
+        try {
+            IAnnotationsAndLambdas proxy = loadAndCreateProxy("AnnotationsAndLambdas", IAnnotationsAndLambdas.class);
+            assertNotNull(proxy);
+            assertNotNull(lastProxied);
+            Annotation[] annos = lastProxied.getClass().getAnnotations();
+            assertNotEquals(0, annos.length, "No annotations found");
+            for (Annotation a : annos) {
+                System.out.println("A: " + a);
             }
+            assertEquals(1, annos.length);
+            String annoString = annos[0].toString();
+            // JDK in continuous build apparently doesn't quote strings in annotations?
+            assertEquals("@com.mastfrog.java.vogon.test.SomeAnnotation(value=Hoober, thing=56)",
+                    annoString.replace("\"", ""));
+            assertEquals(0, proxy.lastValue());
+
+            assertTrue(proxy.time() <= System.currentTimeMillis());
+            assertTrue(proxy.time2() <= System.currentTimeMillis());
+
+            proxy.doSomething(val -> {
+                assertTrue(val instanceof Integer);
+                assertEquals(-3036, val);
+            });
+            Consumer<Integer> c = proxy.getDoerOfSomething((short) 7397);
+            assertEquals(0, proxy.lastValue());
+            c.accept(100);
+            assertEquals(-976404, proxy.lastValue());
+            Object[] stuff = proxy.getStuff();
+
+            assertFalse(proxy.notBool(), srcMessage("If statement was not negated", "AnnotationsAndLambdas",
+                    "notBool", "privvy"));
+
+            for (int i = 0; i < stuff.length; i++) {
+//            System.out.println(i + ".\t" + stuff[i].getClass().getName() + "\t" + stuff[i]);
+                Object o = stuff[i];
+                switch (i) {
+                    case 0:
+                        assertTrue(o instanceof Long);
+                        assertTrue(System.currentTimeMillis() >= ((Long) o));
+                        break;
+                    case 1:
+                        assertEquals(Double.valueOf(1), o);
+                        break;
+                    case 2:
+                        assertTrue(o instanceof StringBuilder);
+                        assertEquals("Hello world", o.toString());
+                        break;
+                    case 3:
+                        assertEquals(Short.valueOf((short) 23), o);
+                        break;
+                    case 4:
+                        assertEquals(Integer.valueOf(70), o);
+                        break;
+                    case 5:
+                        assertEquals("Hello-" + Locale.getDefault(), o);
+                        break;
+                    case 6:
+                        assertEquals(Character.valueOf('x'), o);
+                        break;
+                    case 7:
+                        Assertions.assertArrayEquals(new int[]{1}, (int[]) o);
+                        break;
+                    default:
+                        fail("Too many elements");
+                }
+            }
+        } catch (UndeclaredThrowableException ute) {
+            throw ute.getCause();
         }
     }
 
@@ -221,10 +228,144 @@ public class GenerateClassesTest {
 //        FileUtils.deltree(dir);
     }
 
+    @Test
+    public void testNumbers() throws Exception {
+        Class<?> nums = ldr.loadClass(packageName + "." + "Numbers");
+
+        assertEquals(Byte.valueOf(Byte.MIN_VALUE), findStaticField(Byte.TYPE, "BYTE_MIN", nums));
+        assertEquals(Byte.valueOf(Byte.MAX_VALUE), findStaticField(Byte.TYPE, "BYTE_MAX", nums));
+        assertEquals(Short.valueOf(Short.MIN_VALUE), findStaticField(Short.TYPE, "SHORT_MIN", nums));
+        assertEquals(Short.valueOf(Short.MAX_VALUE), findStaticField(Short.TYPE, "SHORT_MAX", nums));
+        assertEquals(Integer.valueOf(Integer.MIN_VALUE), findStaticField(Integer.TYPE, "INT_MIN", nums));
+        assertEquals(Integer.valueOf(Integer.MAX_VALUE), findStaticField(Integer.TYPE, "INT_MAX", nums));
+        assertEquals(Long.valueOf(Long.MIN_VALUE), findStaticField(Long.TYPE, "LONG_MIN", nums));
+        assertEquals(Long.valueOf(Long.MAX_VALUE), findStaticField(Long.TYPE, "LONG_MAX", nums));
+        assertEquals(Character.valueOf(Character.MIN_VALUE), findStaticField(Character.TYPE, "CHAR_MIN", nums));
+        assertEquals(Character.valueOf(Character.MAX_VALUE), findStaticField(Character.TYPE, "CHAR_MAX", nums));
+
+        assertEquals(Short.valueOf((short) (Short.MIN_VALUE + 1)), findStaticField(Short.TYPE, "SHORT_MIN_1", nums));
+        assertEquals(Short.valueOf((short) (Short.MAX_VALUE - 1)), findStaticField(Short.TYPE, "SHORT_MAX_1", nums));
+        assertEquals(Integer.valueOf(Integer.MIN_VALUE + 1), findStaticField(Integer.TYPE, "INT_MIN_1", nums));
+        assertEquals(Integer.valueOf(Integer.MAX_VALUE - 1), findStaticField(Integer.TYPE, "INT_MAX_1", nums));
+        assertEquals(Long.valueOf(Long.MIN_VALUE + 1), findStaticField(Long.TYPE, "LONG_MIN_1", nums));
+        assertEquals(Long.valueOf(Long.MAX_VALUE - 1), findStaticField(Long.TYPE, "LONG_MAX_1", nums));
+
+        byte[] bytes = findStaticField(byte[].class, "bytes", nums);
+
+        short[] shorts = findStaticField(short[].class, "shorts", nums);
+        int[] ints = findStaticField(int[].class, "ints", nums);
+        long[] longs = findStaticField(long[].class, "longs", nums);
+        int start = (((int) Byte.MIN_VALUE) - 10);
+
+        int bmv = -Byte.MIN_VALUE;
+        for (int i = Byte.MIN_VALUE; i <= Byte.MAX_VALUE; i++) {
+            assertEquals(i, (int) bytes[i + bmv], "Wrong byte value at " + (i + -Byte.MIN_VALUE));
+        }
+        int end = ((int) Byte.MAX_VALUE + 10);
+
+        for (int i = start; i < end; i++) {
+            int val = shorts[i - start];
+            assertEquals(i, val, "Wrong short value at " + (i + -start));
+        }
+        for (int i = start; i < end; i++) {
+            int val = ints[i - start];
+            assertEquals(i, val, "Wrong int value at " + (i + -start));
+        }
+        for (int i = start; i < end; i++) {
+            int val = ints[i - start];
+            assertEquals(i, val, "Wrong long value at " + (i + -start));
+        }
+    }
+
+    private <T> T findStaticField(Class<T> type, String name, Class<?> on) throws Exception {
+        Object o = null;
+        try {
+            Field f = on.getField(name);
+            o = f.get(null);
+            assertNotNull(o, "Field value for " + name + " is null");
+            if (!type.isPrimitive()) {
+                assertTrue(type.isInstance(o), "Not an instance of " + type.getSimpleName() + ": " + o);
+            }
+            return (T) o;
+        } catch (NoSuchFieldException nsfe) {
+            throw new AssertionError("No field " + name + " of type " + type.getSimpleName() + " on " + on.getName(), nsfe);
+        }
+    }
+
     private static void generateClasses(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {
         generateSimpleBean(c);
         generateAnnotation(c);
         generateAnnotationsAndLambdas(c);
+        generateNumbersTest(c);
+    }
+
+    private static void generateNumbersTest(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {
+        ClassBuilder<String> cb = ClassBuilder.forPackage(packageName).named("Numbers")
+                .withModifier(PUBLIC);
+
+        cb.field("BYTE_MIN").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Byte.MIN_VALUE);
+        cb.field("BYTE_MAX").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Byte.MAX_VALUE);
+        cb.field("SHORT_MIN").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Short.MIN_VALUE);
+        cb.field("SHORT_MAX").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Short.MAX_VALUE);
+        cb.field("INT_MIN").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Integer.MIN_VALUE);
+        cb.field("INT_MAX").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Integer.MAX_VALUE);
+        cb.field("LONG_MIN").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MIN_VALUE);
+        cb.field("LONG_MAX").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MAX_VALUE);
+        cb.field("CHAR_MIN").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Character.MIN_VALUE);
+        cb.field("CHAR_MAX").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Character.MAX_VALUE);
+
+        cb.field("SHORT_MIN_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith((short) (Short.MIN_VALUE + 1));
+        cb.field("SHORT_MAX_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith((short) (Short.MAX_VALUE - 1));
+        cb.field("INT_MIN_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Integer.MIN_VALUE + 1);
+        cb.field("INT_MAX_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Integer.MAX_VALUE - 1);
+        cb.field("LONG_MIN_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MIN_VALUE + 1);
+        cb.field("LONG_MAX_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MAX_VALUE - 1);
+
+        cb.field("bytes").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("byte", alb -> {
+            byte start = Byte.MIN_VALUE;
+            byte end = Byte.MAX_VALUE;
+            System.out.println("bytes ");
+            for (byte b = start; b <= end; b++) {
+                System.out.println("b. " + b);
+                alb.literal(b);
+                if (b == end) {
+                    // adding one will circle back around to Byte.MIN_VALUE
+                    // and we will never exit
+                    break;
+                }
+            }
+        });
+
+        cb.field("shorts").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("short", alb -> {
+            short start = (short) (((int) Byte.MIN_VALUE) - 10);
+            short end = (short) ((int) Byte.MAX_VALUE + 10);
+            System.out.println("shorts");
+            for (short s = start; s <= end; s++) {
+                System.out.println("s. " + s);
+                alb.literal(s);
+            }
+        });
+
+        cb.field("ints").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("int", alb -> {
+            int start = (((int) Byte.MIN_VALUE) - 10);
+            int end = ((int) Byte.MAX_VALUE + 10);
+            System.out.println("ints");
+            for (int b = start; b <= end; b++) {
+                System.out.println("i. " + b);
+                alb.literal(b);
+            }
+        });
+        cb.field("longs").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("long", alb -> {
+            long start = (((int) Byte.MIN_VALUE) - 10);
+            long end = ((int) Byte.MAX_VALUE + 10);
+            System.out.println("ints");
+            for (long b = start; b <= end; b++) {
+                System.out.println("i. " + b);
+                alb.literal(b);
+            }
+        });
+
+        c.accept(cb);
     }
 
     private static void generateSimpleBean(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {

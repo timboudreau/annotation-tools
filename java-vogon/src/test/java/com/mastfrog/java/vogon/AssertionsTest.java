@@ -157,7 +157,7 @@ public class AssertionsTest {
         assertLine(cb, "assert false;");
         assertLine(cb, "System.out.println(\"Have a foober\");");
         assertSequence(cb, "23>5.5D");
-        assertSequence(cb, "System.currentTimeMillis() > 10000");
+        assertSequence(cb, "System.currentTimeMillis() > 10_000");
         assertSequence(cb, "thing == \"foo\"");
         assertLine(cb, "if (this.foo[3].wubble.buz() instanceof HoogerBooger){");
         assertLine(cb, "//do nothing");

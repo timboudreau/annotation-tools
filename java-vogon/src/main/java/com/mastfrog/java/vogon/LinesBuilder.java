@@ -329,6 +329,15 @@ public class LinesBuilder {
             case '\'':
                 sb.append("\\'");
                 break;
+            case '\t':
+                sb.append("\\n");
+                break;
+            case '\b':
+                sb.append("\\b");
+                break;
+            case '\n':
+                sb.append("\\n");
+                break;
             default:
                 sb.append(c);
         }
@@ -346,11 +355,33 @@ public class LinesBuilder {
     }
 
     public LinesBuilder appendRaw(char what) {
-        sb.append(what);
+        int ix = -1;
+        // Ensure commas and semicolons are attached to the
+        // thing they delimit
+        switch (what) {
+            case ',':
+            case ';':
+                for (int i = sb.length() - 1; i >= 0; i--) {
+                    char c = sb.charAt(i);
+                    if (Character.isWhitespace(c)) {
+                        ix = i;
+                    } else if (!Character.isWhitespace(c)) {
+                        break;
+                    }
+                }
+        }
+        if (ix > 0) {
+            sb.insert(ix, what);
+        } else {
+            sb.append(what);
+        }
         return this;
     }
 
     public LinesBuilder appendRaw(String what) {
+        if (what.length() == 1) {
+            return appendRaw(what.charAt(0));
+        }
         sb.append(what);
         return this;
     }
@@ -485,6 +516,18 @@ public class LinesBuilder {
 
     public LinesBuilder block(Consumer<LinesBuilder> c) {
         return block(false, c);
+    }
+
+    public LinesBuilder indent(Consumer<LinesBuilder> c) {
+        // Used for ternary
+        currIndent++;
+        try {
+            c.accept(this);
+        } finally {
+            currIndent--;
+            sb.append(newlineIndentChars());
+        }
+        return this;
     }
 
     public LinesBuilder block(boolean leadingNewline, Consumer<LinesBuilder> c) {
