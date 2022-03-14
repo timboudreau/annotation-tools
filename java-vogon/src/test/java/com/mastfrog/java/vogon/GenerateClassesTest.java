@@ -120,12 +120,12 @@ public class GenerateClassesTest {
 
             proxy.doSomething(val -> {
                 assertTrue(val instanceof Integer);
-                assertEquals(-3036, val);
+                assertEquals(-1932, val);
             });
             Consumer<Integer> c = proxy.getDoerOfSomething((short) 7397);
             assertEquals(0, proxy.lastValue());
             c.accept(100);
-            assertEquals(-976404, proxy.lastValue());
+            assertEquals(-621348, proxy.lastValue());
             Object[] stuff = proxy.getStuff();
 
             assertFalse(proxy.notBool(), srcMessage("If statement was not negated", "AnnotationsAndLambdas",
@@ -250,6 +250,13 @@ public class GenerateClassesTest {
         assertEquals(Long.valueOf(Long.MIN_VALUE + 1), findStaticField(Long.TYPE, "LONG_MIN_1", nums));
         assertEquals(Long.valueOf(Long.MAX_VALUE - 1), findStaticField(Long.TYPE, "LONG_MAX_1", nums));
 
+        assertEquals(Short.valueOf((short) (Short.MIN_VALUE / 2)), findStaticField(Short.TYPE, "SHORT_MIN_2", nums));
+        assertEquals(Short.valueOf((short) (Short.MAX_VALUE / 2)), findStaticField(Short.TYPE, "SHORT_MAX_2", nums));
+        assertEquals(Integer.valueOf(Integer.MIN_VALUE / 2), findStaticField(Integer.TYPE, "INT_MIN_2", nums));
+        assertEquals(Integer.valueOf(Integer.MAX_VALUE / 2), findStaticField(Integer.TYPE, "INT_MAX_2", nums));
+        assertEquals(Long.valueOf(Long.MIN_VALUE / 2), findStaticField(Long.TYPE, "LONG_MIN_2", nums));
+        assertEquals(Long.valueOf(Long.MAX_VALUE / 2), findStaticField(Long.TYPE, "LONG_MAX_2", nums));
+
         byte[] bytes = findStaticField(byte[].class, "bytes", nums);
 
         short[] shorts = findStaticField(short[].class, "shorts", nums);
@@ -277,6 +284,7 @@ public class GenerateClassesTest {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private <T> T findStaticField(Class<T> type, String name, Class<?> on) throws Exception {
         Object o = null;
         try {
@@ -286,6 +294,7 @@ public class GenerateClassesTest {
             if (!type.isPrimitive()) {
                 assertTrue(type.isInstance(o), "Not an instance of " + type.getSimpleName() + ": " + o);
             }
+            // This has to be an unsafe cast because of Integer.TYPE vs Integer.class and similar
             return (T) o;
         } catch (NoSuchFieldException nsfe) {
             throw new AssertionError("No field " + name + " of type " + type.getSimpleName() + " on " + on.getName(), nsfe);
@@ -297,6 +306,7 @@ public class GenerateClassesTest {
         generateAnnotation(c);
         generateAnnotationsAndLambdas(c);
         generateNumbersTest(c);
+        generateSwitchImpl(c);
     }
 
     private static void generateNumbersTest(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {
@@ -321,12 +331,18 @@ public class GenerateClassesTest {
         cb.field("LONG_MIN_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MIN_VALUE + 1);
         cb.field("LONG_MAX_1").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MAX_VALUE - 1);
 
+        cb.field("SHORT_MIN_2").withModifier(PUBLIC, STATIC, FINAL).initializedWith((short) (Short.MIN_VALUE / 2));
+        cb.field("SHORT_MAX_2").withModifier(PUBLIC, STATIC, FINAL).initializedWith((short) (Short.MAX_VALUE / 2));
+        cb.field("INT_MIN_2").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Integer.MIN_VALUE / 2);
+        cb.field("INT_MAX_2").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Integer.MAX_VALUE / 2);
+        cb.field("LONG_MIN_2").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MIN_VALUE / 2);
+        cb.field("LONG_MAX_2").withModifier(PUBLIC, STATIC, FINAL).initializedWith(Long.MAX_VALUE / 2);
+
         cb.field("bytes").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("byte", alb -> {
             byte start = Byte.MIN_VALUE;
             byte end = Byte.MAX_VALUE;
             System.out.println("bytes ");
             for (byte b = start; b <= end; b++) {
-                System.out.println("b. " + b);
                 alb.literal(b);
                 if (b == end) {
                     // adding one will circle back around to Byte.MIN_VALUE
@@ -341,7 +357,6 @@ public class GenerateClassesTest {
             short end = (short) ((int) Byte.MAX_VALUE + 10);
             System.out.println("shorts");
             for (short s = start; s <= end; s++) {
-                System.out.println("s. " + s);
                 alb.literal(s);
             }
         });
@@ -351,7 +366,6 @@ public class GenerateClassesTest {
             int end = ((int) Byte.MAX_VALUE + 10);
             System.out.println("ints");
             for (int b = start; b <= end; b++) {
-                System.out.println("i. " + b);
                 alb.literal(b);
             }
         });
@@ -360,11 +374,9 @@ public class GenerateClassesTest {
             long end = ((int) Byte.MAX_VALUE + 10);
             System.out.println("ints");
             for (long b = start; b <= end; b++) {
-                System.out.println("i. " + b);
                 alb.literal(b);
             }
         });
-
         c.accept(cb);
     }
 
@@ -519,6 +531,162 @@ public class GenerateClassesTest {
         long time2();
 
         boolean notBool();
+    }
+
+    public interface ISwitch {
+
+        String switchit(int val, char c, String msg);
+    }
+
+    @Test
+    public void testSwitch() throws Throwable {
+        ISwitch proxy = loadAndCreateProxy("SwitchImpl", ISwitch.class);
+        ISwitch impl = new SwitchIt();
+
+        ISwitch tester = (v, c, m) -> {
+            return assertMatch(impl, v, c, m, proxy);
+        };
+
+        for (char c = 'a'; c < 'f'; c++) {
+            for (int i = 200; i < 270; i++) {
+                tester.switchit(i, c, "item." + i + ".test");
+            }
+        }
+    }
+
+    private String assertMatch(ISwitch expect, int val, char c, String msg, ISwitch proxy) {
+        String result = expect.switchit(val, c, msg);
+        String got = proxy.switchit(val, c, msg);
+        assertEquals(result, got, "Not same result for " + val + ", '" + c + "', \"" + msg + "\"");
+        return result;
+    }
+
+    private static void generateSwitchImpl(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {
+        ClassBuilder<String> cb = ClassBuilder.forPackage(packageName).named("SwitchImpl")
+                .makePublic().autoToString()
+                .method("switchit", mb -> {
+                    mb.withModifier(PUBLIC)
+                            .returning("String")
+                            .addArgument("int", "val")
+                            .addArgument("char", "c")
+                            .addArgument("String", "msg")
+                            .body(bb -> {
+                                bb.iff().literal(0).equals().expression("val").endCondition()
+                                        .iff(ib -> {
+                                            ib.variable("c").equals().literal('e').endCondition()
+                                                    .returningStringConcatenation("ZERO-e-", scb -> {
+                                                        scb.appendExpression("msg")
+                                                                .append("-")
+                                                                .append((short) 5338)
+                                                                .appendExpression("val");
+                                                    });
+                                        }).endIf();
+                                bb.switchingOn("c", sw -> {
+                                    sw.inCase('a', caseA -> {
+                                        caseA.declare("v").initializedTo().
+                                                numeric(veb -> {
+                                                    veb.expression("val")
+                                                            .times().expression("c")
+                                                            .endNumericExpression();
+                                                }).as("int");
+                                        caseA.returningStringConcatenationExpression("msg", cat -> {
+                                            cat.append("-")
+                                                    .appendExpression("v");
+
+                                        });
+                                    });
+                                    sw.inCase('b', caseB -> {
+                                        caseB.iff().value().numeric()
+                                                .expression("val")
+                                                .modulo(2)
+                                                .endNumericExpression()
+                                                .equals()
+                                                .literal(0)
+                                                .endCondition()
+                                                .returningStringConcatenationExpression("msg", scb -> {
+                                                    scb.append("-")
+                                                            .appendExpression("val");
+                                                })
+                                                .orElse(ecb -> {
+                                                    ecb.returningInvocationOf("toString")
+                                                            .withArgument("c")
+                                                            .on("Character");
+                                                });
+                                    });
+                                    sw.inCase('c', caseC -> {
+                                        caseC.returningInvocationOf("toString")
+                                                .withArgument()
+                                                .numeric().expression("val")
+                                                .plus()
+                                                .expression("c")
+                                                .endNumericExpression()
+                                                .on("Integer");
+                                    });
+                                    sw.inCase('d').returningStringLiteral("blork").endBlock();
+
+                                    sw.inCase('e').returningStringConcatenation("", scb -> {
+                                        System.out.println("A");
+                                        scb.with(veb -> {
+                                            System.out.println("B");
+                                            veb.invoke("toString", ivb -> {
+                                                System.out.println("C");
+                                                ivb.withArgument(subV -> {
+                                                    System.out.println("D");
+                                                    subV.numeric().expression("val")
+                                                            .plus()
+                                                            .parenthesized()
+                                                            .numeric()
+                                                            .expression("c")
+                                                            .modulo(2)
+                                                            .endNumericExpression()
+                                                            .times()
+                                                            .invoke("hashCode")
+                                                            .on("msg")
+                                                            .xor(23)
+                                                            .endNumericExpression();
+                                                }).on("Integer");
+                                            });
+                                        }).appendExpression("msg");
+                                    }).endBlock();
+                                    sw.inDefaultCase().andThrow()
+                                            .ofType("IllegalArgumentException");
+                                });
+                            });
+                });
+        c.accept(cb);
+    }
+
+    public static class SwitchIt implements ISwitch {
+
+        @Override
+        public String switchit(int val, char c, String msg) {
+            if (val == 0) {
+                if (c == 'e') {
+                    return "ZERO-e-" + msg + "-" + (short) 5338 + val;
+                }
+            }
+            switch (c) {
+                case 'a':
+                    int v = val * c;
+                    return msg + "-" + v;
+                case 'b':
+                    if (val % 2 == 0) {
+                        return msg + "-" + val;
+                    } else {
+                        return Character.toString(c);
+                    }
+                case 'c':
+                    return Integer.toString(val + c);
+                case 'd':
+                    return "blork";
+                case 'e':
+                    return Integer.toString(val + (c % 2) * msg.hashCode() ^ 23)
+                            + msg;
+                default:
+                    throw new IllegalArgumentException();
+            }
+        }
+
     }
 
     private Object lastProxied;

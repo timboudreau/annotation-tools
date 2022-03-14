@@ -2788,9 +2788,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, type);
             c.accept(res);
-            if (!holder.isSet()) {
-                res.closeArrayLiteral();
-            }
+            holder.ifUnset(res::closeArrayLiteral);
             return holder.get("Array literal not completed");
         }
 
@@ -3361,9 +3359,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, name);
             c.accept(result);
-            if (!holder.isSet()) {
-                result.inScope();
-            }
+            holder.ifUnset(result::inScope);
             return holder.get("Invocation builder not completed");
         }
 
@@ -3406,9 +3402,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             });
             c.accept(sb);
-            if (!holder.isSet()) {
-                sb.endConcatenation();
-            }
+            holder.ifUnset(sb::endConcatenation);
             return holder.get(sb::endConcatenation);
         }
 
@@ -3644,9 +3638,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, this.type);
             cb.accept(result);
-            if (!holder.isSet()) {
-                result.closeArrayLiteral();
-            }
+            holder.ifUnset(result::closeArrayLiteral);
             return holder.get("Array literal not completed");
         }
 
@@ -3787,9 +3779,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, true);
             c.accept(block);
-            if (!hold.isSet()) {
-                block.endBlock();
-            }
+            hold.ifUnset(block::endBlock);
             return hold.get("Block not completed");
         }
 
@@ -4182,6 +4172,23 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 leftSide = newLeftSide;
                 return this;
             });
+        }
+
+        public StringConcatenationBuilder<T> with(Consumer<ValueExpressionBuilder<?>> c) {
+            Holder<StringConcatenationBuilder<T>> hold = new Holder<>();
+            ValueExpressionBuilder<Void> vb = new ValueExpressionBuilder<Void>(veb -> {
+                hold.set(this);
+                if (leftSide == null) {
+                    leftSide = veb;
+                    return null;
+                }
+                BodyBuilder newLeftSide = new Composite(leftSide, Operators.PLUS, veb);
+                leftSide = newLeftSide;
+                return null;
+            });
+            c.accept(vb);
+            hold.ifUnset(vb::closeIfComplete);
+            return hold.get("Value builder not closed");
         }
 
         public StringConcatenationBuilder<T> appendAll(String delimiter, Iterable<? extends CharSequence> all) {
@@ -5076,9 +5083,17 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private boolean parenthesized;
         private boolean newline;
         private Composite cast;
+        private Exception creation = new Exception("Created"); // XXX deleteme
 
         ValueExpressionBuilder(Function<ValueExpressionBuilder<T>, T> converter) {
             this.converter = converter;
+        }
+
+        T closeIfComplete() {
+            if (value == null) {
+                throw new IllegalStateException("Value was not completed - unclosed sub-builder?");
+            }
+            return converter.apply(this);
         }
 
         public ValueExpressionBuilder<T> onNewLine() {
@@ -5094,6 +5109,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
         public ValueExpressionBuilder<T> parenthesized() {
             parenthesized = true;
             return this;
+        }
+
+        public ValueExpressionBuilder<T> subexpression() {
+            return new ValueExpressionBuilder<T>(veb -> {
+                veb.parenthesized = true;
+                value = veb;
+                return converter.apply(this);
+            });
         }
 
         public ConditionBuilder<T> booleanExpression() {
@@ -5191,9 +5214,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, notNull("method", method));
             c.accept(ib);
-            if (!holder.isSet()) {
-                ib.inScope();
-            }
+            holder.ifUnset(ib::inScope);
             return holder.get("Invocation not completed");
         }
 
@@ -5260,6 +5281,16 @@ public final class ClassBuilder<T> implements BodyBuilder {
                     value = scb;
                     return converter.apply(this);
                 });
+            });
+        }
+
+        public StringConcatenationBuilder<T> concatenatedWith() {
+            if (value == null) {
+                throw new IllegalStateException("No existing value to concatenate with", creation);
+            }
+            return new StringConcatenationBuilder<T>(value, scb -> {
+                this.value = scb;
+                return converter.apply(this);
             });
         }
 
@@ -5394,6 +5425,8 @@ public final class ClassBuilder<T> implements BodyBuilder {
                         return res;
                     });
             c.accept(result);
+            System.out.println("H IS SET " + h.isSet());
+            System.out.println("HH IS SET " + hh.isSet());
             return h.get("Value or numeric expression not completed");
         }
 
@@ -5478,9 +5511,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, type);
             c.accept(res);
-            if (!holder.isSet()) {
-                res.closeArrayLiteral();
-            }
+            holder.ifUnset(res::closeArrayLiteral);
             return holder.get("Array literal not completed");
         }
 
@@ -5499,14 +5530,15 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 return null;
             }, type);
             c.accept(bldr);
-            if (!holder.isSet()) {
-                bldr.closeAnnotation();
-            }
+            holder.ifUnset(bldr::closeAnnotation);
             return holder.get("AnnotationBuilder was not completed");
         }
 
         @Override
         public void buildInto(LinesBuilder lines) {
+            if (value == null) {
+                throw new IllegalStateException("No value", creation);
+            }
             if (newline) {
                 lines.onNewLine();
             }
@@ -6678,6 +6710,35 @@ public final class ClassBuilder<T> implements BodyBuilder {
             addDebugStackTraceElementComment();
             addStatement(new ReturnStatement(new Adhoc(LinesBuilder.stringLiteral(s))));
             return cast();
+        }
+
+        public B returningStringConcatenation(String initialLiteral, Consumer<StringConcatenationBuilder<?>> c) {
+            addDebugStackTraceElementComment();
+            Holder<B> hold = new Holder<>();
+            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<Void>(
+                    new Adhoc(LinesBuilder.stringLiteral(initialLiteral)), bldr -> {
+                        addStatement(new ReturnStatement(bldr));
+                        System.out.println("ADDED " + new ReturnStatement(bldr));
+                        hold.set(cast());
+                        return null;
+                    });
+            c.accept(scb);
+            hold.ifUnset(scb::endConcatenation);
+            return hold.get("StringConcatenationBuilder was not closed");
+        }
+
+        public B returningStringConcatenationExpression(String initialExpression, Consumer<StringConcatenationBuilder<?>> c) {
+            addDebugStackTraceElementComment();
+            Holder<B> hold = new Holder<>();
+            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<Void>(
+                    new Adhoc(initialExpression), bldr -> {
+                        addStatement(new ReturnStatement(bldr));
+                        hold.set(cast());
+                        return null;
+                    });
+            c.accept(scb);
+            hold.ifUnset(scb::endConcatenation);
+            return hold.get("StringConcatenationBuilder was not closed");
         }
 
         public InvocationBuilder<B> returningInvocationOf(String method) {
@@ -8540,6 +8601,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public BlockBuilder<SwitchBuilder<T>> inDefaultCase() {
+            // We translate a case of "*" into the default case
             return _case("*");
         }
 
@@ -8548,10 +8610,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public BlockBuilder<SwitchBuilder<T>> inCase(Number num) {
-            if (num instanceof Double || num instanceof Float) {
+            if (num instanceof Double || num instanceof Float || num instanceof Long) {
                 throw new IllegalArgumentException(
-                        "Java switches cannot be over floating point numbers: "
-                        + num);
+                        "Java switches cannot be over floating point numbers or longs: "
+                        + num + " is a " + num.getClass().getSimpleName());
             }
             return _case(num.toString());
         }
@@ -9355,6 +9417,12 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         boolean isSet() {
             return obj != null || wasSetCalled;
+        }
+
+        void ifUnset(Runnable run) {
+            if (!isSet()) {
+                run.run();
+            }
         }
 
         T get(Runnable ifNull) {
