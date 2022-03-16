@@ -4470,6 +4470,25 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return newFinishable(friendlyNumber(lit), Operators.MODULO);
         }
 
+        /*
+        public N nested(String startingExpression, Consumer<NumericExpressionBuilder<?>> c) {
+            Holder<FinishableNumericExpressionBuilder<Void>> f = new Holder();
+            Holder<N> hold = new Holder<>();
+            NumericExpressionBuilder<Void> nu = new NumericExpressionBuilder<>(new Adhoc(startingExpression),
+                    fcb -> {
+                        f.set(fcb);
+                        fcb.parenthesized();
+                        hold.set(cast());
+                        return null;
+                    });
+            c.accept(nu);
+            if (!hold.isSet() && f.isSet()) {
+                f.get().endNumericExpression();
+            }
+            return hold.get("Sub-expression not completed.");
+        }
+        */
+
         /**
          * Create a builder for the right side value of this expression, which
          * will be added to the left side.
@@ -7619,6 +7638,10 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return new ComparisonBuilder<>(this);
         }
 
+        public NumericOrBitwiseExpressionBuilder<ComparisonBuilder<T>> numericExpression(String initialExpression) {
+            return value().numeric().expression(initialExpression);
+        }
+
         public ValueExpressionBuilder<ComparisonBuilder<T>> value() {
             return new ValueExpressionBuilder<>(veb -> {
                 clause = veb;
@@ -9553,7 +9576,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return obj;
     }
 
-    private static BodyBuilder friendlyNumber(Number num) {
+    static BodyBuilder friendlyNumber(Number num) {
         BodyBuilder result;
         if (num instanceof Long) {
             if (num.longValue() == Long.MAX_VALUE) {
@@ -9610,7 +9633,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return result;
     }
 
-    private static String friendlyChar(char c) {
+    static String friendlyChar(char c) {
         switch (c) {
             case Character.MIN_VALUE:
                 return "Character.MIN_VALUE";
@@ -9629,7 +9652,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    private static String friendlyByte(byte b) {
+    static String friendlyByte(byte b) {
         int val = b & 0x000000FF;
         String result = Integer.toHexString(val);
         if (result.length() == 1) {
@@ -9639,7 +9662,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
     }
 
-    private static String friendlyLong(Number lng) {
+    static String friendlyLong(Number lng) {
         String s = Long.toString(lng.longValue(), 10);
         boolean neg = s.charAt(0) == '-';
         if (neg) {
@@ -9664,7 +9687,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return s;
     }
 
-    private static String friendlyInt(Number lng) {
+    static String friendlyInt(Number lng) {
         String s = Integer.toString(lng.intValue(), 10);
         boolean neg = s.charAt(0) == '-';
         if (neg) {
