@@ -5,6 +5,7 @@ import com.mastfrog.java.vogon.ClassBuilder.FinishableConditionBuilder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,7 +39,7 @@ import static javax.lang.model.element.Modifier.VOLATILE;
  *
  * @author Tim Boudreau
  */
-public final class ClassBuilder<T> implements BodyBuilder {
+public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
 
     private final String name;
     private final String pkg;
@@ -74,6 +75,20 @@ public final class ClassBuilder<T> implements BodyBuilder {
             prev = CONTEXT.get();
             CONTEXT.set(this);
         }
+    }
+
+    public String name() {
+        return name;
+    }
+
+    public ClassBuilder<T> sortMembers() {
+        members.sort(NamedMember::compare);
+        for (BodyBuilder bb : members) {
+            if (bb instanceof ClassBuilder<?>) {
+                ((ClassBuilder<?>) bb).sortMembers();
+            }
+        }
+        return this;
     }
 
     public String unusedFieldName(String field) {
@@ -230,6 +245,40 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return name;
     }
 
+    /**
+     * Get the (unqualified) parameterized type name of the class this builder
+     * will create.
+     *
+     * @param fullSignature If true, include any qualifiers in the returned
+     * string - i.e. <code>MyClass&lt;F super Foo, B extends Bar&gt;`, while if false, include
+     * only the type parameter names, e.g. <code>MyClass&lt;F, B&gt;</code>
+     * @return
+     */
+    public String parameterizedClassName(boolean fullSignature) {
+        if (typeParams.isEmpty()) {
+            return className();
+        }
+        String cn = className();
+        StringBuilder sb = new StringBuilder(cn)
+                .append('<');
+        for (String p : typeParams) {
+            if (sb.length() != cn.length() + 1) {
+                sb.append(", ");
+            }
+            String param = fullSignature ? p : implicitTypeParameter(p);
+            sb.append(param);
+        }
+        return sb.append('>').toString();
+    }
+
+    private String implicitTypeParameter(String fullParameter) {
+        if (fullParameter.contains(" extends ") || (fullParameter.contains(" super "))) {
+            String[] parts = fullParameter.split("\\s+");
+            return parts[0];
+        }
+        return fullParameter;
+    }
+
     public String fqn() {
         return pkg + "." + name;
     }
@@ -294,6 +343,17 @@ public final class ClassBuilder<T> implements BodyBuilder {
         for (BodyBuilder bb : this.members) {
             if (bb instanceof MethodBuilder) {
                 if (name.equals(((MethodBuilder) bb).name)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public boolean containsFieldNamed(String name) {
+        for (BodyBuilder bb : this.members) {
+            if (bb instanceof FieldBuilder) {
+                if (name.equals(((FieldBuilder) bb).name)) {
                     return true;
                 }
             }
@@ -1035,8 +1095,9 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 }
                 break;
             case STATIC:
-                if (converter.getClass() == ClassBuilderStringFunction.class) {
-                    throw new IllegalStateException("Top level classes may not be declared static");
+                if (parent == null) {
+//                if (converter.getClass() == ClassBuilderStringFunction.class) {
+                    throw new IllegalStateException(name + " is a top-level class, and may not be declared static.");
                 }
         }
         modifiers.add(m);
@@ -1393,7 +1454,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private final String name;
         private BodyBuilder referent;
         private final Function<FieldReferenceBuilder<T>, T> converter;
-        private final List<Integer> arrayElements = new ArrayList<>();
+        private final List<BodyBuilder> arrayElements = new ArrayList<>();
 
         FieldReferenceBuilder(String name, Function<FieldReferenceBuilder<T>, T> converter) {
             this.name = name;
@@ -1463,6 +1524,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
         }
 
         public FieldReferenceBuilder<T> arrayElement(int index) {
+            arrayElements.add(friendlyNumber(index));
+            return this;
+        }
+
+        public FieldReferenceBuilder<T> arrayElement(Value index) {
             arrayElements.add(index);
             return this;
         }
@@ -1472,7 +1538,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             referent.buildInto(lines);
             lines.backup().appendRaw('.').backup();
             lines.appendRaw(name);
-            for (Integer index : arrayElements) {
+            for (BodyBuilder index : arrayElements) {
                 lines.backup().appendRaw("[" + index + "]");
             }
         }
@@ -1752,7 +1818,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
      *
      * @param <T> The type it builds
      */
-    public static final class MethodBuilder<T> extends BodyBuilderBase {
+    public static final class MethodBuilder<T> extends BodyBuilderBase implements NamedMember {
 
         private final Function<MethodBuilder<T>, T> converter;
         private final Set<Modifier> modifiers = new TreeSet<>();
@@ -1770,6 +1836,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
             for (Modifier m : modifiers) {
                 withModifier(m);
             }
+        }
+
+        @Override
+        public String name() {
+            return name;
         }
 
         /**
@@ -2083,6 +2154,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 lines.word(m.toString());
             }
             if (!typeParams.isEmpty()) {
+                lines.appendRaw(' ');
 //                    lb.commaDelimit(typeParams.toArray(new String[typeParams.size()]));
                 lines.delimit('<', '>', lb -> {
                     for (Iterator<String> it = typeParams.iterator(); it.hasNext();) {
@@ -2750,6 +2822,37 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return converter.apply(this);
         }
 
+        public AssignmentBuilder<T> to(Value assignment) {
+            if (this.assignment != null) {
+                throw new IllegalStateException("Attempt to assign twice: "
+                        + assignment + " and " + this.assignment);
+            }
+            this.assignment = assignment;
+            return this;
+        }
+
+        public T to(Consumer<ValueExpressionBuilder<?>> c) {
+            Holder<T> hold = new Holder<>();
+            ValueExpressionBuilder<Void> veb = new ValueExpressionBuilder<>(v -> {
+                this.assignment = assignment;
+                hold.accept(converter.apply(this));
+                return null;
+            });
+            c.accept(veb);
+            return hold.get("Value expression was not closed");
+        }
+
+        public ValueExpressionBuilder<T> to() {
+            if (this.assignment != null) {
+                throw new IllegalStateException("Attempt to assign twice: "
+                        + assignment + " and " + this.assignment);
+            }
+            return new ValueExpressionBuilder<>(veb -> {
+                this.assignment = veb;
+                return converter.apply(this);
+            });
+        }
+
         public ArrayLiteralBuilder<T> toArrayLiteral(String type) {
             return new ArrayLiteralBuilder<>(alb -> {
                 this.assignment = alb;
@@ -2835,6 +2938,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
         @Override
         BodyBuilder type() {
             return type;
+        }
+
+        public ArrayDeclarationBuilder<T> withDimension(Value v) {
+            dimensions.add(v);
+            return this;
         }
 
         public ArrayDimensionsBuilder<T> withDimension(int dim) {
@@ -2954,6 +3062,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public ArrayLiteralBuilder<T> literal(String s) {
             return veb().literal(s);
+        }
+
+        public ArrayLiteralBuilder<T> add(Value v) {
+            all.add(v);
+            return this;
         }
 
         public ValueExpressionBuilder<ArrayLiteralBuilder<T>> value() {
@@ -3384,6 +3497,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return result;
         }
 
+        public B withArgument(Value v) {
+            arguments.add(v);
+            return cast();
+        }
+
         @Override
         public StringConcatenationBuilder<B> withStringConcatentationArgument(String initialLiteral) {
             StringConcatenationBuilder<B> sb = new StringConcatenationBuilder<>(new Adhoc(LinesBuilder.stringLiteral(initialLiteral)), scb -> {
@@ -3566,9 +3684,9 @@ public final class ClassBuilder<T> implements BodyBuilder {
                     lbb.hangingWrap(lb1 -> {
                         for (Iterator<BodyBuilder> it = arguments.iterator(); it.hasNext();) {
                             BodyBuilder arg = it.next();
-                            arg.buildInto(lb);
+                            arg.buildInto(lb1);
                             if (it.hasNext()) {
-                                lb.appendRaw(',');
+                                lb1.appendRaw(',');
                             }
                         }
                     });
@@ -3730,6 +3848,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
 
         public ForVarBuilder<T> decrement() {
             increment = false;
+            return this;
+        }
+
+        public ForVarBuilder<T> initializedWith(Value v) {
+            this.initializedWith = v;
             return this;
         }
 
@@ -4152,7 +4275,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         private BodyBuilder leftSide;
         private final Function<? super StringConcatenationBuilder<T>, T> converter;
 
-        public StringConcatenationBuilder(BodyBuilder leftSide, Function<? super StringConcatenationBuilder<T>, T> converter) {
+        StringConcatenationBuilder(BodyBuilder leftSide, Function<? super StringConcatenationBuilder<T>, T> converter) {
             this.leftSide = leftSide;
             this.converter = converter;
         }
@@ -4160,6 +4283,16 @@ public final class ClassBuilder<T> implements BodyBuilder {
         @Override
         public String toString() {
             return "StringConcatenationBuilder(" + leftSide + ")";
+        }
+
+        public StringConcatenationBuilder<T> with(Value val) {
+            if (leftSide == null) {
+                leftSide = val;
+                return this;
+            }
+            BodyBuilder newLeftSide = new Composite(leftSide, Operators.PLUS, val);
+            leftSide = newLeftSide;
+            return this;
         }
 
         public ValueExpressionBuilder<StringConcatenationBuilder<T>> with() {
@@ -4487,8 +4620,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
             }
             return hold.get("Sub-expression not completed.");
         }
-        */
-
+         */
         /**
          * Create a builder for the right side value of this expression, which
          * will be added to the left side.
@@ -4727,6 +4859,30 @@ public final class ClassBuilder<T> implements BodyBuilder {
          */
         public ValueExpressionBuilder<F> or() {
             return valueBuilder(BitwiseOperators.OR);
+        }
+
+        public F or(Value val) {
+            return newFinishable(val, BitwiseOperators.OR);
+        }
+
+        public F and(Value val) {
+            return newFinishable(val, BitwiseOperators.AND);
+        }
+
+        public F rotate(Value val) {
+            return newFinishable(val, BitwiseOperators.ROTATE);
+        }
+
+        public F shiftLeft(Value val) {
+            return newFinishable(val, BitwiseOperators.SHIFT_LEFT);
+        }
+
+        public F shiftRight(Value val) {
+            return newFinishable(val, BitwiseOperators.SHIFT_RIGHT);
+        }
+
+        public F xor(Value val) {
+            return newFinishable(val, BitwiseOperators.XOR);
         }
 
         /**
@@ -7642,6 +7798,11 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return value().numeric().expression(initialExpression);
         }
 
+        public ComparisonBuilder<T> compare(Value val) {
+            clause = val;
+            return new ComparisonBuilder<>(this);
+        }
+
         public ValueExpressionBuilder<ComparisonBuilder<T>> value() {
             return new ValueExpressionBuilder<>(veb -> {
                 clause = veb;
@@ -7829,6 +7990,36 @@ public final class ClassBuilder<T> implements BodyBuilder {
             return new FinishableConditionBuilder<>(fcb -> {
                 return converter().apply(new Composite(new Adhoc("!"), fcb));
             }, cb, null);
+        }
+
+        public FinishableConditionBuilder<T> equals(Value val) {
+            ConditionRightSideBuilder<T> cv = new ConditionRightSideBuilder<>(converter(), leftSide, ComparisonOperation.EQ);
+            return new FinishableConditionBuilder<>(converter(), cv, val);
+        }
+
+        public FinishableConditionBuilder<T> notEquals(Value val) {
+            ConditionRightSideBuilder<T> cv = new ConditionRightSideBuilder<>(converter(), leftSide, ComparisonOperation.NE);
+            return new FinishableConditionBuilder<>(converter(), cv, val);
+        }
+
+        public FinishableConditionBuilder<T> greaterThan(Value val) {
+            ConditionRightSideBuilder<T> cv = new ConditionRightSideBuilder<>(converter(), leftSide, ComparisonOperation.GT);
+            return new FinishableConditionBuilder<>(converter(), cv, val);
+        }
+
+        public FinishableConditionBuilder<T> lessThan(Value val) {
+            ConditionRightSideBuilder<T> cv = new ConditionRightSideBuilder<>(converter(), leftSide, ComparisonOperation.LT);
+            return new FinishableConditionBuilder<>(converter(), cv, val);
+        }
+
+        public FinishableConditionBuilder<T> greaterThanOrEqualTo(Value val) {
+            ConditionRightSideBuilder<T> cv = new ConditionRightSideBuilder<>(converter(), leftSide, ComparisonOperation.GTE);
+            return new FinishableConditionBuilder<>(converter(), cv, val);
+        }
+
+        public FinishableConditionBuilder<T> lessThanOrEqualTo(Value val) {
+            ConditionRightSideBuilder<T> cv = new ConditionRightSideBuilder<>(converter(), leftSide, ComparisonOperation.LTE);
+            return new FinishableConditionBuilder<>(converter(), cv, val);
         }
 
         public ConditionRightSideBuilder<T> equals() {
@@ -9054,20 +9245,31 @@ public final class ClassBuilder<T> implements BodyBuilder {
             List<FieldBuilder<?>> flds = fields();
             if (flds.isEmpty()) {
                 scb.append("-empty-");
-            }
-            // do not use char appends here or they can result in adding
-            // to an int if one precedes it
-            for (Iterator<FieldBuilder<?>> it = fields().iterator(); it.hasNext();) {
-                FieldBuilder<?> fb = it.next();
-                String pfx;
-                if (fb.modifiers.contains(Modifier.STATIC)) {
-                    pfx = this.className() + '.';
-                } else {
-                    pfx = "this.";
-                }
-                scb.append(fb.name).append("=").appendExpression(pfx + fb.name);
-                if (it.hasNext()) {
-                    scb.append(", ");
+            } else {
+                Collections.sort(flds, (a, b) -> {
+                    return a.name.compareToIgnoreCase(b.name);
+                });
+                // do not use char appends here or they can result in adding
+                // to an int if one precedes it
+                for (Iterator<FieldBuilder<?>> it = fields().iterator(); it.hasNext();) {
+                    FieldBuilder<?> fb = it.next();
+                    String pfx;
+                    if (fb.modifiers.contains(Modifier.STATIC)) {
+                        pfx = this.className() + '.';
+                    } else {
+                        pfx = "this.";
+                    }
+                    pfx += fb.name;
+                    scb.append(fb.name).append("=");
+                    if (fb.looksLikeArray()) {
+                        scb.appendExpression("(" + pfx + " == null ? \"null\" : "
+                                + "java.util.Arrays.toString(" + pfx + "))");
+                    } else {
+                        scb.appendExpression(pfx);
+                    }
+                    if (it.hasNext()) {
+                        scb.append(", ");
+                    }
                 }
             }
             scb.append(")");
@@ -9077,7 +9279,7 @@ public final class ClassBuilder<T> implements BodyBuilder {
         return this;
     }
 
-    public static final class FieldBuilder<T> extends BodyBuilderBase {
+    public static final class FieldBuilder<T> extends BodyBuilderBase implements NamedMember {
 
         private final Function<FieldBuilder<T>, T> converter;
         private BodyBuilder type;
@@ -9090,6 +9292,22 @@ public final class ClassBuilder<T> implements BodyBuilder {
         FieldBuilder(Function<FieldBuilder<T>, T> converter, String name) {
             this.converter = converter;
             this.name = name;
+        }
+
+        boolean looksLikeArray() {
+            String t = Objects.toString(type);
+            int bix = t.indexOf('[');
+            int gix = t.indexOf('<');
+            if (bix > 0) {
+                if (gix < 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public String name() {
+            return name;
         }
 
         @Override
@@ -9188,6 +9406,14 @@ public final class ClassBuilder<T> implements BodyBuilder {
                 built[0] = true;
                 return this;
             }, anno);
+        }
+
+        public FieldBuilder<T> initializedWith(Value value) {
+            if (initializer != null) {
+                throw new IllegalStateException("Initializer already set");
+            }
+            initializer = value;
+            return this;
         }
 
         public T initializedWith(String stringLiteral) {
@@ -9794,5 +10020,429 @@ public final class ClassBuilder<T> implements BodyBuilder {
         });
         lb.onNewLine();
         lb.appendRaw(" **/");
+    }
+
+    /**
+     * Create an instance of Variable, which simplifies composing mathematical
+     * expressions, and can be used in any method that accepts an instance of
+     * Value.
+     *
+     * @param varName The variable name
+     * @return A variable
+     */
+    public static Variable variable(String varName) {
+        return new Variable(notNull("varName", varName));
+    }
+
+    /**
+     * Parenthesize an instance of Value, which simplifies composing
+     * mathematical expressions, and can be used in any method that accepts an
+     * instance of Value.
+     *
+     * @param value the value
+     * @return A variable
+     */
+    public static Parenthesized parenthesize(Value value) {
+        return new Parenthesized(notNull("value", value));
+    }
+
+    /**
+     * Create an instance of NumberLiteral, which simplifies composing
+     * mathematical expressions, and can be used in any method that accepts an
+     * instance of Value.
+     *
+     * @param varName The variable name
+     * @return A variable
+     */
+    public static NumberLiteral number(Number number) {
+        return new NumberLiteral(notNull("number", number));
+    }
+
+    public static InvocationBuilder<Value> invocationOf(String what) {
+        return new InvocationBuilder<>(ib -> {
+            return new Wrapper(ib);
+        }, what);
+    }
+
+    public interface Value extends BodyBuilder {
+
+        default Value times(String expression) {
+            return times(new Variable(expression));
+        }
+
+        default Value modulo(String expression) {
+            return modulo(new Variable(expression));
+        }
+
+        default Value dividedBy(String expression) {
+            return dividedBy(new Variable(expression));
+        }
+
+        default Value plus(String expression) {
+            return plus(new Variable(expression));
+        }
+
+        default Value minus(String expression) {
+            return minus(new Variable(expression));
+        }
+
+        default Value or(String expression) {
+            return or(new Variable(expression));
+        }
+
+        default Value xor(String expression) {
+            return xor(new Variable(expression));
+        }
+
+        default Value and(String expression) {
+            return and(new Variable(expression));
+        }
+
+        default Value times(Number expression) {
+            return times(new NumberLiteral(expression));
+        }
+
+        default Value modulo(Number expression) {
+            return modulo(new NumberLiteral(expression));
+        }
+
+        default Value dividedBy(Number expression) {
+            return dividedBy(new NumberLiteral(expression));
+        }
+
+        default Value plus(Number expression) {
+            return plus(new NumberLiteral(expression));
+        }
+
+        default Value minus(Number expression) {
+            return minus(new NumberLiteral(expression));
+        }
+
+        default Value or(Number expression) {
+            return or(new NumberLiteral(expression));
+        }
+
+        default Value xor(Number expression) {
+            return xor(new NumberLiteral(expression));
+        }
+
+        default Value and(Number expression) {
+            return and(new NumberLiteral(expression));
+        }
+
+        default Value times(Value expression) {
+            return new Operation(this, Operators.TIMES, expression);
+        }
+
+        default Value modulo(Value expression) {
+            return new Operation(this, Operators.MODULO, expression);
+        }
+
+        default Value dividedBy(Value expression) {
+            return new Operation(this, Operators.DIVIDED_BY, expression);
+        }
+
+        default Value plus(Value expression) {
+            return new Operation(this, Operators.PLUS, expression);
+        }
+
+        default Value minus(Value expression) {
+            return new Operation(this, Operators.MINUS, expression);
+        }
+
+        default Value or(Value expression) {
+            return new Operation(this, BitwiseOperators.OR, expression);
+        }
+
+        default Value xor(Value expression) {
+            return new Operation(this, BitwiseOperators.XOR, expression);
+        }
+
+        default Value and(Value expression) {
+            return new Operation(this, BitwiseOperators.AND, expression);
+        }
+
+        default Value rotate(Value expression) {
+            return new Operation(this, BitwiseOperators.ROTATE, expression);
+        }
+
+        default Value shiftLeft(Value expression) {
+            return new Operation(this, BitwiseOperators.SHIFT_LEFT, expression);
+        }
+
+        default Value shiftRight(Value expression) {
+            return new Operation(this, BitwiseOperators.SHIFT_RIGHT, expression);
+        }
+
+        default Value complement() {
+            Value target = isCompound() ? parenthesized() : this;
+            return new UnaryOp(target, Unaries.COMPLEMENT);
+        }
+
+        default Value parenthesized() {
+            return this instanceof Parenthesized ? this : new Parenthesized(this);
+        }
+
+        default Value castToLong() {
+            return new ValueWithCast(this, "long");
+        }
+
+        default Value castToInt() {
+            return new ValueWithCast(this, "int");
+        }
+
+        default Value castToShort() {
+            return new ValueWithCast(this, "short");
+        }
+
+        default Value castToByte() {
+            return new ValueWithCast(this, "byte");
+        }
+
+        default Value castToFloat() {
+            return new ValueWithCast(this, "float");
+        }
+
+        default Value castToDouble() {
+            return new ValueWithCast(this, "double");
+        }
+
+        boolean isCompound();
+    }
+
+    private static class ValueWithCast extends AbstractValue {
+
+        private final Value target;
+        private final String type;
+
+        ValueWithCast(Value target, String type) {
+            this.target = target;
+            this.type = type;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return target.isCompound();
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.parens(lb -> {
+                lb.appendRaw(type);
+                lines.appendRaw(' ');
+                if (target.isCompound()) {
+                    target.parenthesized().buildInto(lines);
+                } else {
+                    target.buildInto(lines);
+                }
+            });
+        }
+    }
+
+    static abstract class AbstractValue implements Value, BodyBuilder {
+
+        @Override
+        public String toString() {
+            LinesBuilder lb = new LinesBuilder();
+            buildInto(lb);
+            return lb.toString();
+        }
+    }
+
+    private static class Wrapper extends AbstractValue {
+
+        private final BodyBuilder bb;
+
+        Wrapper(BodyBuilder bb) {
+            this.bb = bb;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return true;
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            bb.buildInto(lines);
+        }
+    }
+
+    public static class Variable extends AbstractValue {
+
+        private final String name;
+
+        private Variable(String s) {
+            this.name = checkIdentifier(s);
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.word(name);
+        }
+
+        public Value preIncrement() {
+            return new UnaryOp(this, Unaries.PREINCREMENT);
+        }
+
+        public Value postIncrement() {
+            return new UnaryOp(this, Unaries.POSTINCREMENT);
+        }
+
+        public Value preDecrement() {
+            return new UnaryOp(this, Unaries.PREDECREMENT);
+        }
+
+        public Value postDecrement() {
+            return new UnaryOp(this, Unaries.POSTDECREMENT);
+        }
+
+        @Override
+        public boolean isCompound() {
+            return false;
+        }
+    }
+
+    public static class NumberLiteral extends AbstractValue {
+
+        private final Number num;
+
+        NumberLiteral(Number num) {
+            this.num = num;
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            ClassBuilder.friendlyNumber(num).buildInto(lines);
+        }
+
+        @Override
+        public boolean isCompound() {
+            return false;
+        }
+    }
+
+    static class Parenthesized extends AbstractValue {
+
+        List<BodyBuilder> contents = new ArrayList<>(3);
+
+        Parenthesized(Value cts) {
+            this.contents.add(cts);
+        }
+
+        Parenthesized(Collection<? extends BodyBuilder> cts) {
+            contents.addAll(cts);
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            if (contents.isEmpty()) {
+                return;
+            }
+            lines.parens(lb -> {
+                for (BodyBuilder bb : contents) {
+                    bb.buildInto(lb);
+                }
+            });
+        }
+
+        @Override
+        public boolean isCompound() {
+            return false;
+        }
+    }
+
+    static class UnaryOp extends AbstractValue {
+
+        private final Value target;
+        private final Unaries unary;
+
+        UnaryOp(Value target, Unaries unary) {
+            this.target = target;
+            this.unary = unary;
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            if (unary.isPre()) {
+                unary.buildInto(lines);
+                lines.backup();
+                if (target instanceof Variable) {
+                    lines.appendRaw(target.toString());
+                } else {
+                    target.buildInto(lines);
+                }
+            } else {
+                if (target instanceof Variable) {
+                    lines.appendRaw(target.toString().trim());
+                } else {
+                    target.buildInto(lines);
+                }
+                lines.backup();
+                unary.buildInto(lines);
+            }
+        }
+
+        @Override
+        public boolean isCompound() {
+            return false;
+        }
+    }
+
+    private static enum Unaries implements BodyBuilder {
+        PREINCREMENT("++"),
+        POSTINCREMENT("++"),
+        PREDECREMENT("--"),
+        POSTDECREMENT("--"),
+        COMPLEMENT("~");
+        private final String text;
+
+        Unaries(String text) {
+            this.text = text;
+        }
+
+        boolean isMutative() {
+            return this != COMPLEMENT;
+        }
+
+        boolean isPre() {
+            switch (this) {
+                case POSTDECREMENT:
+                case POSTINCREMENT:
+                    return false;
+                default:
+                    return true;
+            }
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.appendRaw(text);
+        }
+    }
+
+    static class Operation extends AbstractValue {
+
+        private final Value leftSide;
+        private final BodyBuilder op;
+        private final Value rightSide;
+
+        Operation(Value leftSide, BodyBuilder op, Value rightSide) {
+            this.op = op;
+            this.leftSide = leftSide;
+            this.rightSide = rightSide;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return true;
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            leftSide.buildInto(lines);
+            op.buildInto(lines);
+            rightSide.buildInto(lines);
+        }
     }
 }

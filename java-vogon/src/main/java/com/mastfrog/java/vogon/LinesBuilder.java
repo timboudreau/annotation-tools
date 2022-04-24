@@ -231,13 +231,13 @@ public class LinesBuilder {
     void doubleHangingWrap(Consumer<LinesBuilder> c) {
         boolean old = hr;
         hr = true;
-//        if (!old) {
-        currIndent += 2;
-//        }
+        if (!old) {
+            currIndent += 2;
+        }
         hangingWrap(c);
-//        if (!old) {
-        currIndent -= 2;
-//        }
+        if (!old) {
+            currIndent -= 2;
+        }
         hr = old;
     }
 

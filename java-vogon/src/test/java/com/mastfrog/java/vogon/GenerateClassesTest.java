@@ -24,6 +24,8 @@
 package com.mastfrog.java.vogon;
 
 import com.mastfrog.function.throwing.ThrowingConsumer;
+import static com.mastfrog.java.vogon.ClassBuilder.invocationOf;
+import static com.mastfrog.java.vogon.ClassBuilder.variable;
 import com.mastfrog.util.file.FileUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -596,12 +598,12 @@ public class GenerateClassesTest {
                                         });
                                     });
                                     sw.inCase('b', caseB -> {
-                                        caseB.iff().value().numeric()
-                                                .expression("val")
-                                                .modulo(2)
-                                                .endNumericExpression()
-                                                .equals()
-                                                .literal(0)
+                                        /*
+                    return Integer.toString(val + (c % 2) * msg.hashCode() ^ 23)
+                            + msg;
+                                         */
+                                        caseB.iff().compare(variable("val").modulo(2))
+                                                .equals(ClassBuilder.number(0))
                                                 .endCondition()
                                                 .returningStringConcatenationExpression("msg", scb -> {
                                                     scb.append("-")
@@ -612,6 +614,22 @@ public class GenerateClassesTest {
                                                             .withArgument("c")
                                                             .on("Character");
                                                 });
+
+//                                        caseB.iff().numericExpression("val")
+//                                                .modulo(2)
+//                                                .endNumericExpression()
+//                                                .equals()
+//                                                .literal(0)
+//                                                .endCondition()
+//                                                .returningStringConcatenationExpression("msg", scb -> {
+//                                                    scb.append("-")
+//                                                            .appendExpression("val");
+//                                                })
+//                                                .orElse(ecb -> {
+//                                                    ecb.returningInvocationOf("toString")
+//                                                            .withArgument("c")
+//                                                            .on("Character");
+//                                                });
                                     });
                                     sw.inCase('c', caseC -> {
                                         caseC.returningInvocationOf("toString")
@@ -625,28 +643,54 @@ public class GenerateClassesTest {
                                     sw.inCase('d').returningStringLiteral("blork").endBlock();
 
                                     sw.inCase('e').returningStringConcatenation("", scb -> {
-                                        System.out.println("A");
+//                                        return Integer.toString(val + (c % 2) * msg.hashCode() ^ 23)
+//                                                + msg;
+
                                         scb.with(veb -> {
-                                            System.out.println("B");
                                             veb.invoke("toString", ivb -> {
-                                                System.out.println("C");
-                                                ivb.withArgument(subV -> {
-                                                    System.out.println("D");
-                                                    subV.numeric().expression("val")
-                                                            .plus()
-                                                            .parenthesized()
-                                                            .numeric()
-                                                            .expression("c")
-                                                            .modulo(2)
-                                                            .endNumericExpression()
-                                                            .times()
-                                                            .invoke("hashCode")
-                                                            .on("msg")
-                                                            .xor(23)
-                                                            .endNumericExpression();
-                                                }).on("Integer");
+
+                                                ivb.withArgument(
+                                                        variable("val")
+                                                                .plus(variable("c").modulo(2).parenthesized())
+                                                                .times(invocationOf("hashCode").on("msg")
+                                                                        .xor(23))
+                                                ).on("Integer");
+
+//                                                ivb.withArgument(subV -> {
+//                                                    subV.numeric().expression("val")
+//                                                            .plus()
+//                                                            .parenthesized()
+//                                                            .numeric()
+//                                                            .expression("c")
+//                                                            .modulo(2)
+//                                                            .endNumericExpression()
+//                                                            .times()
+//                                                            .invoke("hashCode")
+//                                                            .on("msg")
+//                                                            .xor(23)
+//                                                            .endNumericExpression();
+//                                                }).on("Integer");
                                             });
                                         }).appendExpression("msg");
+
+//                                        scb.with(veb -> {
+//                                            veb.invoke("toString", ivb -> {
+//                                                ivb.withArgument(subV -> {
+//                                                    subV.numeric().expression("val")
+//                                                            .plus()
+//                                                            .parenthesized()
+//                                                            .numeric()
+//                                                            .expression("c")
+//                                                            .modulo(2)
+//                                                            .endNumericExpression()
+//                                                            .times()
+//                                                            .invoke("hashCode")
+//                                                            .on("msg")
+//                                                            .xor(23)
+//                                                            .endNumericExpression();
+//                                                }).on("Integer");
+//                                            });
+//                                        }).appendExpression("msg");
                                     }).endBlock();
                                     sw.inDefaultCase().andThrow()
                                             .ofType("IllegalArgumentException");
