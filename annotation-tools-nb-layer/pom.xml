@@ -1,42 +1,41 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<project
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <parent>
         <groupId>com.mastfrog</groupId>
         <artifactId>mastfrog-parent</artifactId>
         <version>3.0.0-dev</version>
         <relativePath/>
     </parent>
-    <artifactId>annotation-tools</artifactId>
+
+    <artifactId>annotation-tools-nb-layer</artifactId>
+    
+    <description>Extensions to annotations-tools for netbeans module layers</description>
     <url>https://github.com/timboudreau/annotation-tools</url>
+
     <dependencies>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>function</artifactId>
+            <artifactId>annotation-tools</artifactId>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>predicates</artifactId>
+            <groupId>org.netbeans.api</groupId>
+            <artifactId>org-netbeans-api-annotations-common</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>java-vogon</artifactId>
+            <groupId>org.netbeans.api</groupId>
+            <artifactId>org-openide-filesystems</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>util-collections</artifactId>
+            <groupId>org.netbeans.api</groupId>
+            <artifactId>org-openide-util-lookup</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
-    <issueManagement>
-        <system>Github</system>
-        <url>https://github.com/timboudreau/annotation-tools/issues</url>
-    </issueManagement>
-    <inceptionYear>2019</inceptionYear>
-
+    
+    <inceptionYear>2022</inceptionYear>
     <scm>
         <url>https://github.com/timboudreau/annotation-tools.git</url>
         <connection>scm:git:https://github.com/timboudreau/annotation-tools.git</connection>
@@ -63,5 +62,5 @@
             <email>tim@timboudreau.com</email>
             <url>https://timboudreau.com</url>
         </developer>
-    </developers>
+    </developers>    
 </project>

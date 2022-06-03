@@ -28,7 +28,6 @@ import javax.lang.model.element.VariableElement;
 import com.mastfrog.java.vogon.ClassBuilder;
 import com.mastfrog.annotation.AnnotationUtils;
 import com.mastfrog.function.throwing.io.IOBiConsumer;
-import org.openide.filesystems.annotations.LayerBuilder;
 
 /**
  *
@@ -36,17 +35,17 @@ import org.openide.filesystems.annotations.LayerBuilder;
  */
 public class Delegates {
 
-    private final boolean layerGenerating;
+    protected final boolean layerGenerating;
     private final Map<String, Set<DelegateEntry>> delegates = new LinkedHashMap<>();
 
     private final Map<Key<?>, Set<?>> sharedData = new HashMap<>();
 
-    Delegates(boolean layerGenerating) {
+    protected Delegates(boolean layerGenerating) {
         this.layerGenerating = layerGenerating;
     }
 
     @SuppressWarnings("unchecked")
-    <T> void putSharedData(Key<T> key, T data) {
+    public <T> void putSharedData(Key<T> key, T data) {
         assert data != null;
         Set<T> s = (Set<T>) sharedData.get(key);
         if (s == null) {
@@ -57,11 +56,11 @@ public class Delegates {
     }
 
     @SuppressWarnings("unchecked")
-    <T> Set<T> getSharedData(Key<T> key) {
+    public <T> Set<T> getSharedData(Key<T> key) {
         return (Set<T>) sharedData.getOrDefault(key, Collections.emptySet());
     }
 
-    <T> Optional<T> getOneShared(Key<T> key) {
+    public <T> Optional<T> getOneShared(Key<T> key) {
         Set<T> shared = getSharedData(key);
         return shared.isEmpty() ? Optional.empty() : Optional.of(shared.iterator().next());
     }
@@ -93,15 +92,15 @@ public class Delegates {
     }
 
     public MidAddDelegate apply(Delegate delegate) {
-        if (!layerGenerating && delegate instanceof LayerGeneratingDelegate) {
-            throw new IllegalArgumentException("Cannot add a layer generating "
-                    + "delegate to a non-layer-generating annotation "
-                    + "processor");
-        }
+//        if (!layerGenerating && delegate instanceof LayerGeneratingDelegate) {
+//            throw new IllegalArgumentException("Cannot add a layer generating "
+//                    + "delegate to a non-layer-generating annotation "
+//                    + "processor");
+//        }
         return new MidAddDelegate(this, delegate);
     }
 
-    Set<Delegate> allDelegates() {
+    public Set<Delegate> allDelegates() {
         Set<Delegate> result = new LinkedHashSet<>();
         for (Map.Entry<String, Set<DelegateEntry>> e : delegates.entrySet()) {
             Set<DelegateEntry> entries = e.getValue();
@@ -112,11 +111,16 @@ public class Delegates {
         return result;
     }
 
-    void init(ProcessingEnvironment env, AnnotationUtils utils, IOBiConsumer<ClassBuilder<String>, Element[]> classWriter) {
-        init(env, utils, classWriter, null, null);
+    public void init(ProcessingEnvironment env, AnnotationUtils utils, IOBiConsumer<ClassBuilder<String>, Element[]> classWriter) {
+//        init(env, utils, classWriter, null, null);
+        Set<Delegate> all = allDelegates();
+        for (Delegate d : all) {
+            d.init(env, utils, classWriter, this);
+        }
     }
 
-    void init(ProcessingEnvironment env, AnnotationUtils utils, IOBiConsumer<ClassBuilder<String>, Element[]> classWriter, Function<Element[], LayerBuilder> layerBuilderFetcher, BiConsumer<LayerTask, Element[]> layerTaskAdder) {
+    /*
+    public void init(ProcessingEnvironment env, AnnotationUtils utils, IOBiConsumer<ClassBuilder<String>, Element[]> classWriter, Function<Element[], LayerBuilder> layerBuilderFetcher, BiConsumer<LayerTask, Element[]> layerTaskAdder) {
         Set<Delegate> all = allDelegates();
         for (Delegate d : all) {
             if (d instanceof LayerGeneratingDelegate) {
@@ -126,8 +130,9 @@ public class Delegates {
             }
         }
     }
+    */
 
-    boolean validateAnnotationMirror(AnnotationMirror mirror, ElementKind kind, Element element) {
+    public boolean validateAnnotationMirror(AnnotationMirror mirror, ElementKind kind, Element element) {
         String type = mirror.getAnnotationType().toString();
         Set<DelegateEntry> entries = this.delegates.get(type);
         boolean result = true;
@@ -152,7 +157,7 @@ public class Delegates {
         return result;
     }
 
-    boolean processConstructorAnnotation(ExecutableElement constructor, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
+    public boolean processConstructorAnnotation(ExecutableElement constructor, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
         boolean result = true;
         for (DelegateEntry de : entriesFor(constructor, mirror)) {
             Delegate del = de.delegate;
@@ -164,7 +169,7 @@ public class Delegates {
         return result;
     }
 
-    boolean processMethodAnnotation(ExecutableElement method, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
+    public boolean processMethodAnnotation(ExecutableElement method, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
         boolean result = true;
         for (DelegateEntry de : entriesFor(method, mirror)) {
             Delegate del = de.delegate;
@@ -176,7 +181,7 @@ public class Delegates {
         return result;
     }
 
-    boolean processFieldAnnotation(VariableElement var, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
+    public boolean processFieldAnnotation(VariableElement var, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
         boolean result = true;
         for (DelegateEntry de : entriesFor(var, mirror)) {
             Delegate del = de.delegate;
@@ -188,7 +193,7 @@ public class Delegates {
         return result;
     }
 
-    boolean processTypeAnnotation(TypeElement type, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
+    public boolean processTypeAnnotation(TypeElement type, AnnotationMirror mirror, RoundEnvironment roundEnv, Set<? super Delegate> delegates) throws Exception {
         boolean result = true;
         for (DelegateEntry de : entriesFor(type, mirror)) {
             Delegate del = de.delegate;
@@ -200,7 +205,7 @@ public class Delegates {
         return result;
     }
 
-    boolean onRoundCompleted(Map<AnnotationMirror, Element> processed, RoundEnvironment roundEnv, Set<Delegate> used) throws Exception {
+    public boolean onRoundCompleted(Map<AnnotationMirror, Element> processed, RoundEnvironment roundEnv, Set<Delegate> used) throws Exception {
         boolean result = true;
         for (Delegate d : used) {
             result &= d._roundCompleted(processed, roundEnv);
@@ -317,11 +322,7 @@ public class Delegates {
             if (!Objects.equals(this.delegate, other.delegate)) {
                 return false;
             }
-            if (!Objects.equals(this.kinds, other.kinds)) {
-                return false;
-            }
-            return true;
+            return Objects.equals(this.kinds, other.kinds);
         }
     }
-
 }

@@ -38,9 +38,14 @@ import com.mastfrog.annotation.validation.AbstractPredicateBuilder;
 public abstract class AbstractDelegatingProcessor extends AbstractProcessor {
 
     private AnnotationUtils utils;
-    private final Delegates delegates = new Delegates(false);
+    private final Delegates delegates;
 
     protected AbstractDelegatingProcessor() {
+        this.delegates= createDelegates();
+    }
+    
+    protected Delegates createDelegates() {
+        return new Delegates(false);
     }
 
     /**

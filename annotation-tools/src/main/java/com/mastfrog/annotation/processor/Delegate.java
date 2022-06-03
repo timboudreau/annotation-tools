@@ -27,6 +27,12 @@ import com.mastfrog.util.strings.Strings;
  * @author Tim Boudreau
  */
 public abstract class Delegate {
+    
+    // Pending:  This class contains some messy initialization logic
+    // due to moving the netbeans-dependent stuff to annotation-tools-nb-layer.
+    //
+    // What should happen, post modularization:  Move this class to a package
+    // that is only exported to the nb-layer package.
 
     protected ProcessingEnvironment processingEnv;
     private AnnotationUtils utils;
@@ -87,7 +93,7 @@ public abstract class Delegate {
         return new Key<>(type, name);
     }
 
-    final void init(ProcessingEnvironment env, AnnotationUtils utils,
+    public final void init(ProcessingEnvironment env, AnnotationUtils utils,
             IOBiConsumer<ClassBuilder<String>, Element[]> classWriter, Delegates delegates) {
         this.processingEnv = env;
         this.delegates = delegates;

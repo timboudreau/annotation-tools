@@ -19,6 +19,7 @@
     <modules>
         <module>annotation-tools</module>
         <module>java-vogon</module>
+        <module>annotation-tools-nb-layer</module>
     </modules>
     <issueManagement>
         <system>Github</system>

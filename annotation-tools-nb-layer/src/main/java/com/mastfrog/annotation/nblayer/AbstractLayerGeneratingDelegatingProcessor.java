@@ -1,4 +1,4 @@
-package com.mastfrog.annotation.processor;
+package com.mastfrog.annotation.nblayer;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -13,6 +13,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import com.mastfrog.annotation.AnnotationUtils;
+import com.mastfrog.annotation.processor.Delegate;
+import com.mastfrog.annotation.processor.Delegates;
 import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -39,7 +41,7 @@ public abstract class AbstractLayerGeneratingDelegatingProcessor extends LayerGe
 
     private AnnotationUtils utils;
 
-    private final Delegates delegates = new Delegates(true);
+    private final NbDelegates delegates = new NbDelegates();
 
     protected AbstractLayerGeneratingDelegatingProcessor() {
     }

@@ -202,6 +202,7 @@ public class TypeMirrorTestBuilder<T> extends AbstractPredicateBuilder<TypeMirro
         return utils.processingEnv().getElementUtils().getTypeElement(mir.toString());
     }
 
+    @SuppressWarnings("unchecked")
     public TypeElementTestBuilder<TypeMirrorTestBuilder<T>, ? extends TypeElementTestBuilder<TypeMirrorTestBuilder<T>, ?>> asElement() {
         return (TypeElementTestBuilder /* JDK 8 javac compatibility */) new TypeElementTestBuilder<>(utils, tetb -> {
                     return addPredicate(this::toTypeElement, tetb._predicate());

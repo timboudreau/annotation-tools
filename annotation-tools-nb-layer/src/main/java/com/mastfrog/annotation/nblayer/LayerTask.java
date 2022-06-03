@@ -1,4 +1,4 @@
-package com.mastfrog.annotation.processor;
+package com.mastfrog.annotation.nblayer;
 
 import org.openide.filesystems.annotations.LayerBuilder;
 

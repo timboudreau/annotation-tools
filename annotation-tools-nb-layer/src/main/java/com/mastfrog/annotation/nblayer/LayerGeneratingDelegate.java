@@ -1,4 +1,4 @@
-package com.mastfrog.annotation.processor;
+package com.mastfrog.annotation.nblayer;
 
 import java.util.function.BiConsumer;
 import java.util.function.Function;
@@ -6,6 +6,8 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 import com.mastfrog.java.vogon.ClassBuilder;
 import com.mastfrog.annotation.AnnotationUtils;
+import com.mastfrog.annotation.processor.Delegate;
+import com.mastfrog.annotation.processor.Delegates;
 import com.mastfrog.function.throwing.io.IOBiConsumer;
 import com.mastfrog.function.throwing.io.IOConsumer;
 import com.mastfrog.util.preconditions.Exceptions;
@@ -24,7 +26,7 @@ public abstract class LayerGeneratingDelegate extends Delegate {
     protected LayerGeneratingDelegate() {
     }
 
-    protected final void init(ProcessingEnvironment env, AnnotationUtils utils, IOBiConsumer<ClassBuilder<String>, Element[]> classWriter, Function<Element[], LayerBuilder> layerBuilderFetcher, BiConsumer<LayerTask, Element[]> layerTaskAdder, Delegates del) {
+    public final void init(ProcessingEnvironment env, AnnotationUtils utils, IOBiConsumer<ClassBuilder<String>, Element[]> classWriter, Function<Element[], LayerBuilder> layerBuilderFetcher, BiConsumer<LayerTask, Element[]> layerTaskAdder, Delegates del) {
         this.layerBuilderFetcher = layerBuilderFetcher;
         this.layerTaskAdder = layerTaskAdder;
         super.init(env, utils, classWriter, del);
