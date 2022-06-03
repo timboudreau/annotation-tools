@@ -6565,7 +6565,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             InvocationBuilder<Void> ib = new InvocationBuilder<>(b -> {
                 closed[0] = true;
                 addDebugStackTraceElementComment();
-                addStatement(b);
+                addStatement(new StatementWrapper(b));
                 return null;
             }, method);
             c.accept(ib);
