@@ -11,6 +11,7 @@ import com.mastfrog.util.collections.CollectionUtils;
 import com.mastfrog.util.strings.Strings;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.AnnotationTypeMismatchException;
+import java.lang.reflect.Array;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -821,7 +822,7 @@ public final class AnnotationUtils {
                             if (o instanceof AnnotationValue) {
                                 AnnotationValue av = (AnnotationValue) o;
                                 try {
-                                    result = type.cast(av.getValue());
+                                    result = coerce(av.getValue(), type);
                                     break;
                                 } catch (ClassCastException | AnnotationTypeMismatchException ex) {
                                     ex.printStackTrace(System.out);
@@ -830,7 +831,7 @@ public final class AnnotationUtils {
                                             + ", but was " + type.getName() + ": " + ex.getMessage(), x.getKey());
                                 }
                             } else {
-                                result = type.cast(result);
+                                result = coerce(result, type);
                             }
                         }
                     } else {
@@ -888,11 +889,11 @@ public final class AnnotationUtils {
 //        System.out.println("   returning " + result);
         return result;
     }
-    
+
     /**
      * Perform some simple type coercions, so Integer.TYPE and friends can be
      * used, and Integers and longs can be coerced to each other.
-     * 
+     *
      * @param <T> The expected type
      * @param o The dereferenced object
      * @param type The type
@@ -908,22 +909,85 @@ public final class AnnotationUtils {
         } else if (o instanceof Long && (type == Integer.class || type == Integer.TYPE)) {
             long l = (Long) o;
             if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
-                return  type.cast(Long.valueOf(l).intValue());
+                return type.cast(Long.valueOf(l).intValue());
             }
         } else if (o instanceof Integer && (type == Long.class || type == Long.TYPE)) {
             int val = (int) o;
             return type.cast((long) val);
-        } else if (o instanceof Double && (type == Float.class || type == Float.TYPE)){
+        } else if (o instanceof Double && (type == Float.class || type == Float.TYPE)) {
             double val = (double) o;
-            if (val >=Float.MIN_VALUE && val <= Float.MAX_VALUE ) {
+            if (val >= Float.MIN_VALUE && val <= Float.MAX_VALUE) {
                 return type.cast((float) val);
             }
         } else if (o instanceof Float && (type == Double.class || type == Double.TYPE)) {
             float f = (float) o;
             return type.cast((double) f);
+        } else if (o instanceof String && (type == char[].class)) {
+            return type.cast(o.toString().toCharArray());
+        } else if (o instanceof List<?> && type.isArray()) {
+            List<?> l = (List<?>) o;
+            Class<?> comp = type.getComponentType();
+            if (comp.isPrimitive()) {
+                if (type == int[].class) {
+                    int[] result = new int[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = n.intValue();
+                    }
+                    return type.cast(result);
+                } else if (type == long[].class) {
+                    long[] result = new long[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = n.longValue();
+                    }
+                    return type.cast(result);
+                } else if (type == double[].class) {
+                    double[] result = new double[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = n.doubleValue();
+                    }
+                    return type.cast(result);
+                } else if (type == float[].class) {
+                    float[] result = new float[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = n.floatValue();
+                    }
+                    return type.cast(result);
+                } else if (type == short[].class) {
+                    short[] result = new short[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = n.shortValue();
+                    }
+                    return type.cast(result);
+                } else if (type == byte[].class) {
+                    byte[] result = new byte[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = n.byteValue();
+                    }
+                    return type.cast(result);
+                } else if (type == char[].class) {
+                    char[] result = new char[l.size()];
+                    for (int i = 0; i < result.length; i++) {
+                        Number n = (Number) l.get(i);
+                        result[i] = (char) n.intValue();
+                    }
+                    return type.cast(result);
+                }
+            } else {
+                Object result = Array.newInstance(comp, l.size());
+                for (int i = 0; i < l.size(); i++) {
+                    Array.set(result, i, l.get(i));
+                }
+                return type.cast(result);
+            }
         }
-        throw new ClassCastException("Cannot coerce " + o + " of type " + o.getClass().getName() 
-            + " to " + type.getName());
+        throw new ClassCastException("Cannot coerce " + o + " of type " + o.getClass().getName()
+                + " to " + type.getName());
     }
 
     /**
