@@ -907,7 +907,7 @@ public final class AnnotationUtils {
         if (type.isInstance(o)) {
             return type.cast(o);
         } else if (type.isArray() && type.getComponentType().isInstance(o)) {
-            Object arr = Array.newInstance(type, 1);
+            Object arr = Array.newInstance(type.getComponentType(), 1);
             Array.set(arr, 0, o);
             return type.cast(arr);
         } else if (o instanceof Number && type == long[].class) {
