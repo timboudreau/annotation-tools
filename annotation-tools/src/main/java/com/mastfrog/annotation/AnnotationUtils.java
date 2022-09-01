@@ -844,26 +844,26 @@ public final class AnnotationUtils {
                                         if (o instanceof AnnotationValue) {
                                             AnnotationValue av2 = (AnnotationValue) o;
                                             try {
-                                                result = type.cast(av2.getValue());
+                                                result = coerce(av2.getValue(), type);
                                                 break;
                                             } catch (ClassCastException | AnnotationTypeMismatchException ex) {
                                                 ex.printStackTrace(System.out);
                                                 fail("Not an instance of " + type.getName() + " for value of "
                                                         + param + " on " + mirror.getAnnotationType()
                                                         + ", but was " + type.getName() + " - " + av2
-                                                        + " / " + (av2 == null ? null : av2.getValue())
+                                                        + " / " + av2.getValue()
                                                         + ": " + ex.getMessage(), x.getKey());
                                             }
                                         } else {
-                                            result = type.cast(result);
+                                            result = coerce(result, type);
                                         }
                                     }
                                 } else {
-                                    result = type.cast(av.getValue());
+                                    result = coerce(av.getValue(), type);
                                 }
                             } else {
 //                            System.out.println("  try single cast");
-                                result = type.cast(x.getValue().getValue());
+                                result = coerce(x.getValue().getValue(), type);
                             }
                         } catch (ClassCastException | AnnotationTypeMismatchException ex) {
                             boolean failed = true;
@@ -887,6 +887,43 @@ public final class AnnotationUtils {
         }
 //        System.out.println("   returning " + result);
         return result;
+    }
+    
+    /**
+     * Perform some simple type coercions, so Integer.TYPE and friends can be
+     * used, and Integers and longs can be coerced to each other.
+     * 
+     * @param <T> The expected type
+     * @param o The dereferenced object
+     * @param type The type
+     * @return An instance
+     * @throws ClassCastException if nothing useful can be done
+     */
+    private static <T> T coerce(Object o, Class<T> type) {
+        if (o == null) {
+            return null;
+        }
+        if (type.isInstance(o)) {
+            return type.cast(o);
+        } else if (o instanceof Long && (type == Integer.class || type == Integer.TYPE)) {
+            long l = (Long) o;
+            if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
+                return  type.cast(Long.valueOf(l).intValue());
+            }
+        } else if (o instanceof Integer && (type == Long.class || type == Long.TYPE)) {
+            int val = (int) o;
+            return type.cast((long) val);
+        } else if (o instanceof Double && (type == Float.class || type == Float.TYPE)){
+            double val = (double) o;
+            if (val >=Float.MIN_VALUE && val <= Float.MAX_VALUE ) {
+                return type.cast((float) val);
+            }
+        } else if (o instanceof Float && (type == Double.class || type == Double.TYPE)) {
+            float f = (float) o;
+            return type.cast((double) f);
+        }
+        throw new ClassCastException("Cannot coerce " + o + " of type " + o.getClass().getName() 
+            + " to " + type.getName());
     }
 
     /**
