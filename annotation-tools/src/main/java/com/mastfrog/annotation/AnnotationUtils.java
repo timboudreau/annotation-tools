@@ -906,6 +906,20 @@ public final class AnnotationUtils {
         }
         if (type.isInstance(o)) {
             return type.cast(o);
+        } else if (type.isArray() && type.getComponentType().isInstance(o)) {
+            Object arr = Array.newInstance(type, 1);
+            Array.set(arr, 0, o);
+            return type.cast(arr);
+        } else if (o instanceof Number && type == long[].class) {
+            return type.cast(new long[]{((Number) o).longValue()});
+        } else if (o instanceof Number && type == int[].class) {
+            return type.cast(new int[]{((Number)o).intValue()});
+        } else if (o instanceof Number && type == short[].class) {
+            return type.cast(new short[]{((Number)o).shortValue()});
+        } else if (o instanceof Number && type == byte[].class) {
+            return type.cast(new byte[]{((Number)o).byteValue()});
+        } else if (o instanceof Number && type == char[].class) {
+            return type.cast(new char[]{(char) ((Number)o).intValue()});
         } else if (o instanceof Long && (type == Integer.class || type == Integer.TYPE)) {
             long l = (Long) o;
             if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
