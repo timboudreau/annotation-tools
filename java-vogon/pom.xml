@@ -12,6 +12,8 @@
         <artifactId>annotation-tools-parent</artifactId>
         <version>2.8.3</version>
     </parent>
+    
+    <version>2.8.3.1</version>
 
     <artifactId>java-vogon</artifactId>
 

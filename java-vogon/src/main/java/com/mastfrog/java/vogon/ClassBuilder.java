@@ -860,6 +860,89 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             return hold.get("Annotated argument builder not completed");
         }
 
+        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>>
+                addMultiAnnotatedArgument(String annotationType) {
+            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>(bldr -> {
+                return new ParameterNameBuilder<ConstructorBuilder<T>>(name -> {
+                    arguments.put(new Adhoc(name), new Multi(bldr.annotations));
+                    return this;
+                });
+            }).annotatedWith(annotationType);
+        }
+
+        public ConstructorBuilder<T> addMultiAnnotatedArgument(String annotationType,
+                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>>>> c) {
+            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>>> hold
+                    = new Holder<>();
+            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>> result
+                    = new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>>(bldr -> {
+                return new ParameterNameBuilder<Void>(name -> {
+                    arguments.put(new Adhoc(name), new Multi(bldr.annotations));
+                    hold.set(bldr);
+                    return null;
+                });
+            });
+            c.accept(result.annotatedWith(annotationType));
+            hold.ifUnset(result::closeAnnotations);
+            return this;
+        }
+
+        private static final class Multi implements BodyBuilder {
+
+            private final List<BodyBuilder> items = new ArrayList<>();
+
+            Multi(List<? extends BodyBuilder> all) {
+                this.items.addAll(all);
+            }
+
+            @Override
+            public void buildInto(LinesBuilder lines) {
+                lines.hangingWrap(lb -> {
+                    for (BodyBuilder bb : items) {
+                        bb.buildInto(lines);
+                        lines.appendRaw(' ');
+                    }
+                });
+            }
+        }
+
+        public static final class MultiAnnotatedArgumentBuilder<T> {
+
+            private final Function<MultiAnnotatedArgumentBuilder<T>, T> converter;
+            private final List<AnnotationBuilder<?>> annotations = new ArrayList<>();
+
+            public MultiAnnotatedArgumentBuilder(Function<MultiAnnotatedArgumentBuilder<T>, T> converter) {
+                this.converter = converter;
+            }
+
+            public AnnotationBuilder<MultiAnnotatedArgumentBuilder<T>> annotatedWith(String annotationType) {
+                return new AnnotationBuilder<>(
+                        annotationsAndType -> {
+                            annotations.add(annotationsAndType);
+                            return this;
+                        }, annotationType);
+            }
+
+            public MultiAnnotatedArgumentBuilder<T> annotatedWith(String annotationType, Consumer<AnnotationBuilder<?>> c) {
+                Holder<MultiAnnotatedArgumentBuilder<T>> holder = new Holder<>();
+                AnnotationBuilder<Void> anno = new AnnotationBuilder<>(
+                        annotationsAndType -> {
+                            annotations.add(annotationsAndType);
+                            holder.set(this);
+                            return null;
+                        }, annotationType);
+
+                holder.ifUnset(anno::closeAnnotation);
+                c.accept(anno);
+                return holder.get("Annotation builder was not completed");
+            }
+
+            public T closeAnnotations() {
+                return converter.apply(this);
+            }
+
+        }
+
         public T body(Consumer<? super BlockBuilder<?>> c) {
             Holder<T> hold = new Holder<>();
             BlockBuilder<Void> block = new BlockBuilder<>(bb -> {
