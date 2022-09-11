@@ -638,26 +638,26 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         public void buildInto(LinesBuilder lines) {
 
         }
+    }
 
-        static class AnnotationsAndType extends BodyBuilderBase {
+    static class AnnotationsAndType extends BodyBuilderBase {
 
-            private final String type;
-            private final List<BodyBuilder> all;
+        private final String type;
+        private final List<BodyBuilder> all;
 
-            AnnotationsAndType(String type, List<BodyBuilder> all) {
-                this.type = type;
-                this.all = new ArrayList<>(all);
-            }
+        AnnotationsAndType(String type, List<BodyBuilder> all) {
+            this.type = type;
+            this.all = new ArrayList<>(all);
+        }
 
-            @Override
-            public void buildInto(LinesBuilder lines) {
-                lines.hangingWrap(lb -> {
-                    for (BodyBuilder bb : all) {
-                        bb.buildInto(lb);
-                    }
-                    lb.word(type);
-                });
-            }
+        @Override
+        public void buildInto(LinesBuilder lines) {
+            lines.hangingWrap(lb -> {
+                for (BodyBuilder bb : all) {
+                    bb.buildInto(lb);
+                }
+                lb.word(type);
+            });
         }
     }
 
@@ -860,31 +860,51 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             return hold.get("Annotated argument builder not completed");
         }
 
-        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>>
+        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<ConstructorBuilder<T>>>>>
                 addMultiAnnotatedArgument(String annotationType) {
-            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>(bldr -> {
-                return new ParameterNameBuilder<ConstructorBuilder<T>>(name -> {
-                    arguments.put(new Adhoc(name), new Multi(bldr.annotations));
-                    return this;
+            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<ConstructorBuilder<T>>>>(bldr -> {
+                return new ParameterNameBuilder<>(name -> {
+                    return new TypeNameBuilder<>(typeName -> {
+                        arguments.put(new Adhoc(name), bldr.appendingType(typeName.type));
+                        return this;
+                    });
                 });
             }).annotatedWith(annotationType);
         }
 
         public ConstructorBuilder<T> addMultiAnnotatedArgument(String annotationType,
-                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>>>> c) {
-            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>>> hold
+                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>>> c) {
+            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>> hold
                     = new Holder<>();
-            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>> result
-                    = new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<Void>>(bldr -> {
-                return new ParameterNameBuilder<Void>(name -> {
-                    arguments.put(new Adhoc(name), new Multi(bldr.annotations));
-                    hold.set(bldr);
-                    return null;
-                });
-            });
+            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>> result
+                    = new MultiAnnotatedArgumentBuilder<>(bldr -> {
+                        return new ParameterNameBuilder<>(name -> {
+                            return new TypeNameBuilder<>(type -> {
+                                arguments.put(new Adhoc(name), bldr.appendingType(type.type));
+                                hold.set(bldr);
+                                return null;
+                            });
+
+                        });
+                    });
             c.accept(result.annotatedWith(annotationType));
             hold.ifUnset(result::closeAnnotations);
             return this;
+        }
+
+        public static final class TypeNameBuilder<T> {
+
+            private final Function<TypeNameBuilder<T>, T> converter;
+            BodyBuilder type;
+
+            TypeNameBuilder(Function<TypeNameBuilder<T>, T> converter) {
+                this.converter = converter;
+            }
+
+            public T ofType(String type) {
+                this.type = parseTypeName(checkIdentifier(notNull("type", type)));
+                return converter.apply(this);
+            }
         }
 
         private static final class Multi implements BodyBuilder {
@@ -913,6 +933,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
 
             public MultiAnnotatedArgumentBuilder(Function<MultiAnnotatedArgumentBuilder<T>, T> converter) {
                 this.converter = converter;
+            }
+
+            BodyBuilder appendingType(BodyBuilder type) {
+                List<BodyBuilder> nue = new ArrayList<>(annotations);
+                nue.add(type);
+                return new Multi(nue);
             }
 
             public AnnotationBuilder<MultiAnnotatedArgumentBuilder<T>> annotatedWith(String annotationType) {

@@ -45,6 +45,7 @@ public class TestMultiAnnotationArguments {
                     .closeAnnotation()
                     .closeAnnotations()
                     .named("buzzle")
+                    .ofType("Thing")
                     .body(bb -> {
                         bb.invoke("println").withArgument("buzzle").onField("out").of("System");
                     });
@@ -69,7 +70,8 @@ public class TestMultiAnnotationArguments {
                             secondAnno.addArgument("foo", true);
                         })
                         .closeAnnotations()
-                        .named("buzzle");
+                        .named("buzzle")
+                        .ofType("HooHa");
             }).body(bb -> {
                 bb.invoke("println").withArgument("buzzle").onField("out").of("System");
             });
