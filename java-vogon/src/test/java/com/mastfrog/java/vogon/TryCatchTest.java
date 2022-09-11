@@ -126,7 +126,6 @@ public class TryCatchTest {
         } catch (IllegalStateException ex) {
 
         }
-        System.out.println(cb.toString());
     }
 
     @Test

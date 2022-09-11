@@ -107,9 +107,6 @@ public class GenerateClassesTest {
             assertNotNull(lastProxied);
             Annotation[] annos = lastProxied.getClass().getAnnotations();
             assertNotEquals(0, annos.length, "No annotations found");
-            for (Annotation a : annos) {
-                System.out.println("A: " + a);
-            }
             assertEquals(1, annos.length);
             String annoString = annos[0].toString();
             // JDK in continuous build apparently doesn't quote strings in annotations?
@@ -226,8 +223,7 @@ public class GenerateClassesTest {
 
     @AfterAll
     public static void teardown() throws IOException {
-        System.out.println("dir " + dir);
-//        FileUtils.deltree(dir);
+        FileUtils.deltree(dir);
     }
 
     @Test
@@ -343,7 +339,6 @@ public class GenerateClassesTest {
         cb.field("bytes").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("byte", alb -> {
             byte start = Byte.MIN_VALUE;
             byte end = Byte.MAX_VALUE;
-            System.out.println("bytes ");
             for (byte b = start; b <= end; b++) {
                 alb.literal(b);
                 if (b == end) {
@@ -357,7 +352,6 @@ public class GenerateClassesTest {
         cb.field("shorts").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("short", alb -> {
             short start = (short) (((int) Byte.MIN_VALUE) - 10);
             short end = (short) ((int) Byte.MAX_VALUE + 10);
-            System.out.println("shorts");
             for (short s = start; s <= end; s++) {
                 alb.literal(s);
             }
@@ -366,7 +360,6 @@ public class GenerateClassesTest {
         cb.field("ints").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("int", alb -> {
             int start = (((int) Byte.MIN_VALUE) - 10);
             int end = ((int) Byte.MAX_VALUE + 10);
-            System.out.println("ints");
             for (int b = start; b <= end; b++) {
                 alb.literal(b);
             }
@@ -374,7 +367,6 @@ public class GenerateClassesTest {
         cb.field("longs").withModifier(PUBLIC, STATIC, FINAL).initializedAsArrayLiteral("long", alb -> {
             long start = (((int) Byte.MIN_VALUE) - 10);
             long end = ((int) Byte.MAX_VALUE + 10);
-            System.out.println("ints");
             for (long b = start; b <= end; b++) {
                 alb.literal(b);
             }
@@ -754,7 +746,6 @@ public class GenerateClassesTest {
                 con.setAccessible(true);
                 instance = con.newInstance(constructorArgs);
             }
-            System.out.println("created instance " + instance + " of type " + instance.getClass().getName());
             lastProxied = instance;
             return (T) Proxy.newProxyInstance(ldr, new Class<?>[]{iface}, new IH(instance));
         } finally {

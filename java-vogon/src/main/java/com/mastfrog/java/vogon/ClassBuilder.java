@@ -892,83 +892,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             return this;
         }
 
-        public static final class TypeNameBuilder<T> {
-
-            private final Function<TypeNameBuilder<T>, T> converter;
-            BodyBuilder type;
-
-            TypeNameBuilder(Function<TypeNameBuilder<T>, T> converter) {
-                this.converter = converter;
-            }
-
-            public T ofType(String type) {
-                this.type = parseTypeName(checkIdentifier(notNull("type", type)));
-                return converter.apply(this);
-            }
-        }
-
-        private static final class Multi implements BodyBuilder {
-
-            private final List<BodyBuilder> items = new ArrayList<>();
-
-            Multi(List<? extends BodyBuilder> all) {
-                this.items.addAll(all);
-            }
-
-            @Override
-            public void buildInto(LinesBuilder lines) {
-                lines.hangingWrap(lb -> {
-                    for (BodyBuilder bb : items) {
-                        bb.buildInto(lines);
-                        lines.appendRaw(' ');
-                    }
-                });
-            }
-        }
-
-        public static final class MultiAnnotatedArgumentBuilder<T> {
-
-            private final Function<MultiAnnotatedArgumentBuilder<T>, T> converter;
-            private final List<AnnotationBuilder<?>> annotations = new ArrayList<>();
-
-            public MultiAnnotatedArgumentBuilder(Function<MultiAnnotatedArgumentBuilder<T>, T> converter) {
-                this.converter = converter;
-            }
-
-            BodyBuilder appendingType(BodyBuilder type) {
-                List<BodyBuilder> nue = new ArrayList<>(annotations);
-                nue.add(type);
-                return new Multi(nue);
-            }
-
-            public AnnotationBuilder<MultiAnnotatedArgumentBuilder<T>> annotatedWith(String annotationType) {
-                return new AnnotationBuilder<>(
-                        annotationsAndType -> {
-                            annotations.add(annotationsAndType);
-                            return this;
-                        }, annotationType);
-            }
-
-            public MultiAnnotatedArgumentBuilder<T> annotatedWith(String annotationType, Consumer<AnnotationBuilder<?>> c) {
-                Holder<MultiAnnotatedArgumentBuilder<T>> holder = new Holder<>();
-                AnnotationBuilder<Void> anno = new AnnotationBuilder<>(
-                        annotationsAndType -> {
-                            annotations.add(annotationsAndType);
-                            holder.set(this);
-                            return null;
-                        }, annotationType);
-
-                holder.ifUnset(anno::closeAnnotation);
-                c.accept(anno);
-                return holder.get("Annotation builder was not completed");
-            }
-
-            public T closeAnnotations() {
-                return converter.apply(this);
-            }
-
-        }
-
         public T body(Consumer<? super BlockBuilder<?>> c) {
             Holder<T> hold = new Holder<>();
             BlockBuilder<Void> block = new BlockBuilder<>(bb -> {
@@ -1110,6 +1033,83 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             }
             return lb.toString();
         }
+    }
+
+    public static final class TypeNameBuilder<T> {
+
+        private final Function<TypeNameBuilder<T>, T> converter;
+        BodyBuilder type;
+
+        TypeNameBuilder(Function<TypeNameBuilder<T>, T> converter) {
+            this.converter = converter;
+        }
+
+        public T ofType(String type) {
+            this.type = parseTypeName(checkIdentifier(notNull("type", type)));
+            return converter.apply(this);
+        }
+    }
+
+    private static final class Multi implements BodyBuilder {
+
+        private final List<BodyBuilder> items = new ArrayList<>();
+
+        Multi(List<? extends BodyBuilder> all) {
+            this.items.addAll(all);
+        }
+
+        @Override
+        public void buildInto(LinesBuilder lines) {
+//            lines.hangingWrap(lb -> {
+                for (BodyBuilder bb : items) {
+                    bb.buildInto(lines);
+                    lines.appendRaw(' ');
+                }
+//            });
+        }
+    }
+
+    public static final class MultiAnnotatedArgumentBuilder<T> {
+
+        private final Function<MultiAnnotatedArgumentBuilder<T>, T> converter;
+        private final List<AnnotationBuilder<?>> annotations = new ArrayList<>();
+
+        public MultiAnnotatedArgumentBuilder(Function<MultiAnnotatedArgumentBuilder<T>, T> converter) {
+            this.converter = converter;
+        }
+
+        BodyBuilder appendingType(BodyBuilder type) {
+            List<BodyBuilder> nue = new ArrayList<>(annotations);
+            nue.add(type);
+            return new Multi(nue);
+        }
+
+        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<T>> annotatedWith(String annotationType) {
+            return new AnnotationBuilder<>(
+                    annotationsAndType -> {
+                        annotations.add(annotationsAndType);
+                        return this;
+                    }, annotationType);
+        }
+
+        public MultiAnnotatedArgumentBuilder<T> annotatedWith(String annotationType, Consumer<AnnotationBuilder<?>> c) {
+            Holder<MultiAnnotatedArgumentBuilder<T>> holder = new Holder<>();
+            AnnotationBuilder<Void> anno = new AnnotationBuilder<>(
+                    annotationsAndType -> {
+                        annotations.add(annotationsAndType);
+                        holder.set(this);
+                        return null;
+                    }, annotationType);
+
+            holder.ifUnset(anno::closeAnnotation);
+            c.accept(anno);
+            return holder.get("Annotation builder was not completed");
+        }
+
+        public T closeAnnotations() {
+            return converter.apply(this);
+        }
+
     }
 
     public static final class PackageBuilder {
@@ -2126,20 +2126,56 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             return body(c);
         }
 
+        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<MethodBuilder<T>>>>>
+                addMultiAnnotatedArgument(String annotationType) {
+            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<MethodBuilder<T>>>>(bldr -> {
+                return new ParameterNameBuilder<>(name -> {
+                    return new TypeNameBuilder<>(typeName -> {
+                        args.add(new ArgPair(bldr.appendingType(typeName.type), new Adhoc(name)));
+                        return this;
+                    });
+                });
+            }).annotatedWith(annotationType);
+        }
+
+        public MethodBuilder<T> addMultiAnnotatedArgument(String annotationType,
+                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>>> c) {
+            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>> hold
+                    = new Holder<>();
+            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>> result
+                    = new MultiAnnotatedArgumentBuilder<>(bldr -> {
+                        return new ParameterNameBuilder<>(name -> {
+                            return new TypeNameBuilder<>(type -> {
+                                args.add(new ArgPair(bldr.appendingType(type.type), new Adhoc(name)));
+                                hold.set(bldr);
+                                return null;
+                            });
+                        });
+                    });
+            c.accept(result.annotatedWith(annotationType));
+            hold.ifUnset(result::closeAnnotations);
+            return this;
+        }
+
         private static final class ArgPair extends BodyBuilderBase {
 
             private final BodyBuilder type;
-            private final String name;
+            private final BodyBuilder name;
+
+            ArgPair(BodyBuilder type, BodyBuilder name) {
+                this.type = type;
+                this.name = name;
+            }
 
             ArgPair(BodyBuilder type, String name) {
                 this.type = type;
-                this.name = checkIdentifier(name);
+                this.name = new Adhoc(checkIdentifier(name));
             }
 
             @Override
             public void buildInto(LinesBuilder lines) {
                 type.buildInto(lines);
-                lines.word(name);
+                name.buildInto(lines);
             }
         }
 
@@ -5709,8 +5745,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
                         return res;
                     });
             c.accept(result);
-            System.out.println("H IS SET " + h.isSet());
-            System.out.println("HH IS SET " + hh.isSet());
             return h.get("Value or numeric expression not completed");
         }
 
@@ -6999,10 +7033,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         public B returningStringConcatenation(String initialLiteral, Consumer<StringConcatenationBuilder<?>> c) {
             addDebugStackTraceElementComment();
             Holder<B> hold = new Holder<>();
-            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<Void>(
+            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<>(
                     new Adhoc(LinesBuilder.stringLiteral(initialLiteral)), bldr -> {
                         addStatement(new ReturnStatement(bldr));
-                        System.out.println("ADDED " + new ReturnStatement(bldr));
                         hold.set(cast());
                         return null;
                     });
@@ -7014,7 +7047,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         public B returningStringConcatenationExpression(String initialExpression, Consumer<StringConcatenationBuilder<?>> c) {
             addDebugStackTraceElementComment();
             Holder<B> hold = new Holder<>();
-            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<Void>(
+            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<>(
                     new Adhoc(initialExpression), bldr -> {
                         addStatement(new ReturnStatement(bldr));
                         hold.set(cast());

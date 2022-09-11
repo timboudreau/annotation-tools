@@ -150,7 +150,6 @@ public class TernaryTest {
                                         .inScope().endIf();
                             });
                 });
-        System.out.println(cb);
         assertTrue(contains(cb, "if", "3", "==", "blah.poof"));
 
         assertTrue(contains(cb, "if", "5", "!=", "blah.murg"));

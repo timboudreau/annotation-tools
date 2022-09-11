@@ -33,6 +33,30 @@ import org.junit.jupiter.api.Test;
 public class TestMultiAnnotationArguments {
 
     @Test
+    public void testMethodArgs() {
+        ClassBuilder<String> cb = ClassBuilder.forPackage("org.wug").named("AnnoMethodThing");
+        cb.method("doit", con -> {
+            con.addMultiAnnotatedArgument("Wug")
+                    .addArgument("type", String.class)
+                    .addArgument("moo", 23)
+                    .closeAnnotation()
+                    .annotatedWith("Floog")
+                    .addArgument("foo", true)
+                    .closeAnnotation()
+                    .closeAnnotations()
+                    .named("buzzle")
+                    .ofType("Thing")
+                    .body(bb -> {
+                        bb.invoke("println").withArgument("buzzle").onField("out").of("System");
+                    });
+        });
+        String s = cb.build();
+        assertTrue(s.contains("@Wug(type = java.lang.String.class, moo = 23)"));
+        assertTrue(s.contains("@Floog(foo = true)"));
+        assertTrue(s.contains("buzzle"));
+    }
+
+    @Test
     public void testSimpleArgs() {
         ClassBuilder<String> cb = ClassBuilder.forPackage("org.wug").named("AnnoThing");
         cb.constructor(con -> {
@@ -78,8 +102,6 @@ public class TestMultiAnnotationArguments {
         });
 
         String s = cb.build();
-
-        System.out.println(s);
 
         assertTrue(s.contains("@Wug(type = java.lang.String.class, moo = 23)"));
         assertTrue(s.contains("@Floog(foo = true)"));

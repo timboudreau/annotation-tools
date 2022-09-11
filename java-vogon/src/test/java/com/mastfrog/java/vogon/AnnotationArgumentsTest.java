@@ -52,8 +52,6 @@ public class AnnotationArgumentsTest {
                     });
         });
 
-        System.out.println("ONE");
-        System.out.println(cb.build());
         assertTrue(cb.build().contains("@JsonProperty(required = true, value = \"something\")"));
     }
 
@@ -75,8 +73,6 @@ public class AnnotationArgumentsTest {
                 bb.assign("this.something").toExpression("something");
             });
         });
-        System.out.println("TWO");
-        System.out.println(cb.build());
         assertTrue(cb.build().contains("@JsonProperty(required = true, value = \"something\")"));
     }
 

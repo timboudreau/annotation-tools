@@ -104,7 +104,6 @@ public class ClassBuilderTest {
                                 .onField("out").of("System");
                     }).endBlock();
         });
-        System.out.println(cb);
     }
 
     @Test
@@ -123,8 +122,6 @@ public class ClassBuilderTest {
                                 nb.ofType("Thingamabob");
                             });
                 });
-
-        System.out.println(cb.build());
     }
 
 }

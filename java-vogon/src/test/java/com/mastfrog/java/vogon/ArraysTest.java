@@ -68,7 +68,6 @@ public class ArraysTest {
 
         });
 
-        System.out.println(cb);
         assertSequence(cb, "matrix[4][5] = 23;");
         assertSequence(cb, "pixel = matrix[12][15];");
         assertSequence(cb, " int[][] matrix = new int[96][48]");

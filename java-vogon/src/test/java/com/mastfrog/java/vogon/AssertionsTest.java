@@ -103,9 +103,6 @@ public class AssertionsTest {
         assertSequence(cb, "assert val == 1 : \"Hey you\" + thing + System.out;");
         assertSequence(cb, "assert System.out != null : \"Hello world\";");
         assertSequence(cb, "assert System.out != null : \"Hey\" + 23 + 'x' + System.currentTimeMillis();");
-
-        System.out.println("--------------------------");
-        System.out.println(cb);
     }
 
     @Test
@@ -153,7 +150,6 @@ public class AssertionsTest {
                         .endIf();
             });
         });
-        System.out.println(cb);
         assertLine(cb, "assert false;");
         assertLine(cb, "System.out.println(\"Have a foober\");");
         assertSequence(cb, "23>5.5D");
@@ -207,8 +203,6 @@ public class AssertionsTest {
             statements.add(u);
             additions.add(body);
             addedAt.add(new Exception());
-
-            System.out.println("ADD " + body);
         }
     }
 }
