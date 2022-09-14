@@ -3744,6 +3744,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         public B withArgumentFromNew(Consumer<NewBuilder<?>> c) {
             Holder<B> h = new Holder<>();
             NewBuilder<Void> nb = new NewBuilder<>(b -> {
+                arguments.add(b);
                 h.set(cast());
                 return null;
             });
@@ -7059,6 +7060,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public InvocationBuilder<B> returningInvocationOf(String method) {
+            addDebugStackTraceElementComment();
             return new InvocationBuilder<>(ib -> {
                 addDebugStackTraceElementComment();
                 addStatement(new ReturnStatement(ib));
@@ -7067,6 +7069,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public X returningInvocationOf(String method, Consumer<? super InvocationBuilder<?>> c) {
+            addDebugStackTraceElementComment();
             boolean[] built = new boolean[1];
             Holder<X> holder = new Holder<>();
             InvocationBuilder<Void> b = new InvocationBuilder<>(ib -> {
