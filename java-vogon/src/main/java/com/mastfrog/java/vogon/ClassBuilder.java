@@ -128,7 +128,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         if (importConsumer != null) {
             return importConsumer;
         }
-        return imports::add;
+        return this::addImport;
+    }
+
+    private void addImport(String imp) {
+        if (imp.indexOf('<') >= 0) {
+            throw new IllegalArgumentException("Imports cannot contain "
+                    + "generics.  Attempting to import '" + imp + "'");
+        }
+        imports.add(imp);
     }
 
     /**
@@ -872,6 +880,18 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             }).annotatedWith(annotationType);
         }
 
+        public MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<ConstructorBuilder<T>>>>
+                addMultiAnnotatedArgument() {
+            return new MultiAnnotatedArgumentBuilder<>(bldr -> {
+                return new ParameterNameBuilder<>(name -> {
+                    return new TypeNameBuilder<>(typeName -> {
+                        arguments.put(new Adhoc(name), bldr.appendingType(typeName.type));
+                        return this;
+                    });
+                });
+            });
+        }
+
         public ConstructorBuilder<T> addMultiAnnotatedArgument(String annotationType,
                 Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>>> c) {
             Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>> hold
@@ -1061,10 +1081,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         @Override
         public void buildInto(LinesBuilder lines) {
 //            lines.hangingWrap(lb -> {
-                for (BodyBuilder bb : items) {
-                    bb.buildInto(lines);
-                    lines.appendRaw(' ');
-                }
+            for (BodyBuilder bb : items) {
+                bb.buildInto(lines);
+                lines.appendRaw(' ');
+            }
 //            });
         }
     }
