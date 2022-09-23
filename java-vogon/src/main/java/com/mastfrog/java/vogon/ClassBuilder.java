@@ -1,7 +1,20 @@
 package com.mastfrog.java.vogon;
 
+import com.mastfrog.code.generation.common.general.Statement;
+import com.mastfrog.code.generation.common.general.BodyBuilderBase;
+import com.mastfrog.code.generation.common.general.DoubleNewline;
+import com.mastfrog.code.generation.common.general.Composite;
+import com.mastfrog.code.generation.common.general.Adhoc;
+import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.LinesBuilder;
+import com.mastfrog.code.generation.common.SourceFileBuilder;
+import com.mastfrog.code.generation.common.util.Holder;
+import static com.mastfrog.code.generation.common.util.Utils.notNull;
 import static com.mastfrog.java.vogon.BitwiseOperators.COMPLEMENT;
 import com.mastfrog.java.vogon.ClassBuilder.FinishableConditionBuilder;
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -16,13 +29,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,10 +52,12 @@ import static javax.lang.model.element.Modifier.VOLATILE;
  *
  * @author Tim Boudreau
  */
-public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
+public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFileBuilder {
 
     private final String name;
     private final String pkg;
+    private final List<ConstructorBuilder<?>> constructors = new LinkedList<>();
+    private EnumConstantBuilder<ClassBuilder<T>> constants;
     private final List<BodyBuilder> members = new LinkedList<>();
     private final Set<String> imports = new TreeSet<>();
     private final Set<Modifier> modifiers = new TreeSet<>();
@@ -77,8 +92,23 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
     }
 
+    @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String fileExtension() {
+        return ".java";
+    }
+
+    @Override
+    public Optional<String> namespace() {
+        String pk = packageName();
+        if (pk == null || pk.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(pk);
     }
 
     public ClassBuilder<T> sortMembers() {
@@ -119,6 +149,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         return field;
     }
 
+    public Path sourceFileRelativePath() {
+        String pkg = packageName();
+        if (!pkg.isEmpty()) {
+            return Paths.get(className() + ".java");
+        }
+        return Paths.get(pkg.replace('.', File.separatorChar))
+                .resolve(className() + ".java");
+    }
+
     ClassBuilder<T> withImportConsumer(Consumer<String> c) {
         this.importConsumer = c;
         return this;
@@ -157,7 +196,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
      * Static-import a variable defined in this type (usually for use in an
      * annotation, or which reference inner enum types).
      *
-     * @param importName An unqualified name of a field that exist or will be
+     * @param firstImport An unqualified name of a field that exist or will be
      * defined for this class
      * @param next Additional names to import
      * @return this
@@ -467,19 +506,23 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         return this;
     }
 
-    private final List<ConstructorBuilder<?>> constructors = new LinkedList<>();
-
     /**
      * Creates a private constructor which simply throws an assertion error.
      *
      * @return
      */
     public ClassBuilder<T> utilityClassConstructor() {
+        if (this.isInterface()) {
+            throw new IllegalStateException("Interfaces cannot have constructors");
+        }
         return constructor().setModifier(PRIVATE).body()
                 .statement("throw new AssertionError()").endBlock();
     }
 
     public ClassBuilder<T> constructor(Consumer<? super ConstructorBuilder<?>> c) {
+        if (this.isInterface()) {
+            throw new IllegalStateException("Interfaces cannot have constructors");
+        }
         boolean[] built = new boolean[1];
         ConstructorBuilder<?> result = constructor(built);
         c.accept(result);
@@ -494,6 +537,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
     }
 
     private ConstructorBuilder<ClassBuilder<T>> constructor(boolean[] built) {
+        if (this.isInterface()) {
+            throw new IllegalStateException("Interfaces cannot have constructors");
+        }
         return new ConstructorBuilder<>(cb -> {
             if (contains(cb)) {
                 throw new IllegalStateException("Already have a constructor with arguments (" + cb.sig() + ")");
@@ -504,9 +550,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         });
     }
 
-    private EnumConstantBuilder<ClassBuilder<T>> constants;
-
     public EnumConstantBuilder<ClassBuilder<T>> enumConstants(String first) {
+        if (!isEnum()) {
+            toEnum();
+        }
         return enumConstants().add(first);
     }
 
@@ -554,14 +601,22 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
     }
 
     private BlockBuilder<ClassBuilder<T>> staticBlock(boolean[] built) {
+        if (isInterface()) {
+            throw new IllegalStateException(className() + " is an interface.  "
+                    + "It cannot have a static block.");
+        }
         return new BlockBuilder<>(bb -> {
-            members.add(new Composite(new Adhoc("static"), bb, new Dnl()));
+            members.add(new Composite(new Adhoc("static"), bb, new DoubleNewline()));
             built[0] = true;
             return ClassBuilder.this;
         }, true);
     }
 
     public BlockBuilder<ClassBuilder<T>> block() {
+        if (isInterface()) {
+            throw new IllegalStateException(className() + " is an interface.  "
+                    + "It cannot have an init block.");
+        }
         return block(new boolean[1]);
     }
 
@@ -570,12 +625,16 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         BlockBuilder<?> bldr = block(built);
         c.accept(bldr);
         if (!built[0]) {
-            throw new IllegalStateException("Block not closed");
+            bldr.endBlock();
         }
         return this;
     }
 
     private BlockBuilder<ClassBuilder<T>> block(boolean[] built) {
+        if (isInterface()) {
+            throw new IllegalStateException(className() + " is an interface.  "
+                    + "It cannot have an init block.");
+        }
         return new BlockBuilder<>(bb -> {
             members.add(bb);
             built[0] = true;
@@ -683,39 +742,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
     }
 
-    static final class Composite extends BodyBuilderBase {
-
-        private final BodyBuilder[] contents;
-
-        Composite(BodyBuilder... all) {
-            this.contents = all;
-        }
-
-        static Composite of(List<BodyBuilder> all) {
-            return new Composite(all.toArray(new BodyBuilder[all.size()]));
-        }
-
-        @Override
-        public void buildInto(LinesBuilder lines) {
-            for (BodyBuilder content : contents) {
-                content.buildInto(lines);
-            }
-        }
-    }
-
-    static final class Dnl implements BodyBuilder {
-
-        @Override
-        public void buildInto(LinesBuilder lines) {
-            lines.doubleNewline();
-        }
-
-        @Override
-        public String toString() {
-            return "\n\n";
-        }
-    }
-
     public static final class EnumConstantBuilder<T> extends BodyBuilderBase {
 
         private final Function<EnumConstantBuilder<T>, T> converter;
@@ -727,7 +753,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public EnumConstantBuilder<T> add(String name) {
-            constants.add(new Adhoc(name));
+            constants.add(new Adhoc(checkIdentifier(name)));
             return this;
         }
 
@@ -1702,7 +1728,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
                 lines.word("default");
                 defaultValue.buildInto(lines);
             }
-            lines.backup().appendRaw(';');
+            lines.statementTerminator();
         }
 
         public T ofType(String type) {
@@ -2432,13 +2458,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             String tn = arrM.group(1);
             String arrDecl = arrM.group(2);
             BodyBuilder result = parseTypeName(tn);
-            return new Composite(result, new BackupRaw(arrDecl));
+            return new Composite(result, new BackupAndAppendRaw(arrDecl));
         }
         arrM = VARARG.matcher(typeName);
         if (arrM.find()) {
             String tn = arrM.group(1);
             BodyBuilder result = parseTypeName(tn);
-            return new Composite(result, new BackupRaw("..."));
+            return new Composite(result, new BackupAndAppendRaw("..."));
         }
         if (checkIdentifier(typeName).indexOf('<') >= 0) {
             GenericTypeVisitor gtv = new GenericTypeVisitor();
@@ -2680,7 +2706,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         });
 
     }
-    private static BodyBuilder RAW_BRACKETS = new BackupRaw("[]");
+    private static BodyBuilder RAW_BRACKETS = new BackupAndAppendRaw("[]");
     private static BodyBuilder WRAPPABLE_BRACKETS = new Adhoc("[]");
 
     /**
@@ -6543,17 +6569,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public B blankLine() {
-            addStatement(new NL());
+            addStatement(new DoubleNewline());
             return cast();
-        }
-
-        static final class NL implements BodyBuilder {
-
-            @Override
-            public void buildInto(LinesBuilder lines) {
-                lines.doubleNewline();
-            }
-
         }
 
         public B lambda(Consumer<? super LambdaBuilder<?>> c) {
@@ -6715,15 +6732,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             return cast();
         }
 
-        static class ONL implements BodyBuilder {
-
-            @Override
-            public void buildInto(LinesBuilder lines) {
-                lines.onNewLine();
-            }
-
-        }
-
         public B invoke(String method, Consumer<? super InvocationBuilder<?>> c) {
             boolean[] closed = new boolean[1];
             InvocationBuilder<Void> ib = new InvocationBuilder<>(b -> {
@@ -6741,8 +6749,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public T andThrow(String what) {
-            addStatement(
-                    new StatementWrapper(new Composite(new Adhoc("throw"), new Adhoc(checkIdentifier(notNull("what", what))))));
+            addStatement(new StatementWrapper(new Composite(new Adhoc("throw"), new Adhoc(checkIdentifier(notNull("what", what))))));
             return endBlock();
         }
 
@@ -6872,9 +6879,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
                 return result;
             });
             c.accept(bldr);
-            if (secondary.obj != null) {
-                if (!secondary.obj.built) {
-                    secondary.obj.build();
+            if (secondary.get() != null) {
+                if (!secondary.get().built) {
+                    secondary.get().build();
                 }
             }
             return hold.get("Value or assertion builder not completed");
@@ -6909,8 +6916,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             c.accept(bldr);
             if (!hold.isSet()) {
                 if (secondary.isSet()) {
-                    if (!secondary.obj.built) {
-                        secondary.obj.build();
+                    if (!secondary.get().built) {
+                        secondary.get().build();
                     }
                 }
             }
@@ -6920,7 +6927,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         public InvocationBuilder<B> invoke(String method) {
             return new InvocationBuilder<>(ib -> {
                 addDebugStackTraceElementComment();
-                addStatement(new WrappedStatement(ib));
+                addStatement(new Statement(ib));
                 return cast();
             }, method);
         }
@@ -7209,22 +7216,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             return converter.apply(cast());
         }
 
-        static class WrappedStatement extends BodyBuilderBase {
-
-            private final BodyBuilder wrapped;
-
-            WrappedStatement(BodyBuilder wrapped) {
-                this.wrapped = wrapped;
-            }
-
-            @Override
-            public void buildInto(LinesBuilder lines) {
-                lines.statement(lb1 -> {
-                    wrapped.buildInto(lb1);
-                });
-            }
-        }
-
         static class OneStatement extends BodyBuilderBase {
 
             private final String text;
@@ -7267,46 +7258,34 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
                             }
                         }
                         if (!first) {
-                            lb.appendRaw(';');
+                            lb.statementTerminator();
                         }
                     });
                 } else {
                     if (initialNewline) {
                         lines.statement(text.trim());
                     } else {
-                        lines.word(text.trim()).appendRaw(';').onNewLine();
+                        lines.word(text.trim());
+                        lines.statementTerminator().onNewLine();
                     }
                 }
             }
         }
     }
 
-    static final class LineComment extends BodyBuilderBase {
+    public static final class LineComment extends BodyBuilderBase {
 
         private final String line;
         private final boolean trailing;
 
-        LineComment(String what, boolean trailing) {
+        public LineComment(String what, boolean trailing) {
             this.line = what;
             this.trailing = trailing;
         }
 
         @Override
         public void buildInto(LinesBuilder lines) {
-            if (trailing) {
-                lines.backup().appendRaw(" ");
-            } else {
-                lines.onNewLine();
-            }
-            for (String part : line.split("\n")) {
-                part = part.trim();
-                if (part.isEmpty()) {
-                    lines.doubleNewline();
-                } else {
-                    lines.appendRaw("// " + part);
-                    lines.onNewLine();
-                }
-            }
+            lines.lineComment(trailing, line);
         }
     }
 
@@ -8067,52 +8046,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
     }
 
-    private static final class Adhoc extends BodyBuilderBase {
-
-        private final String what;
-        private boolean hangingWrap;
-
-        Adhoc(String what) {
-            this(what, true);
-        }
-
-        Adhoc(String what, boolean hangingWrap) {
-            this.what = notNull("what", what);
-        }
-
-        @Override
-        public String toString() {
-            return what;
-        }
-
-        @Override
-        public void buildInto(LinesBuilder lines) {
-            lines.word(what, hangingWrap);
-        }
-
-        @Override
-        public int hashCode() {
-            int hash = 7;
-            hash = 67 * hash + Objects.hashCode(this.what);
-            return hash;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            final Adhoc other = (Adhoc) obj;
-            return Objects.equals(this.what, other.what);
-        }
-    }
-
     public static final class ComparisonBuilder<T> extends BodyBuilderBase {
 
         private final ConditionBuilder<T> leftSide;
@@ -8356,7 +8289,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public ValueExpressionBuilder<T> isEqualTo() {
-            return new ValueExpressionBuilder<T>(veb -> {
+            return new ValueExpressionBuilder<>(veb -> {
                 ConditionRightSideBuilder<T> eq = equals();
                 T res = eq.forValue(veb).endCondition();
                 return res;
@@ -8376,7 +8309,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
 
         public ValueExpressionBuilder<T> isNotEqualTo() {
-            return new ValueExpressionBuilder<T>(veb -> {
+            return new ValueExpressionBuilder<>(veb -> {
                 ConditionRightSideBuilder<T> eq = notEquals();
                 T res = eq.forValue(veb).endCondition();
                 return res;
@@ -9803,65 +9736,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         public void buildInto(LinesBuilder lines) {
             if (bb instanceof Composite) {
                 Composite comp = (Composite) bb;
-                if (comp.contents.length == 0) {
+                if (comp.isEmpty()) {
                     return;
                 }
             }
             lines.onNewLine();
             bb.buildInto(lines);
             lines.backup();
-            lines.appendRaw(';');
-        }
-    }
-
-    private static final class Holder<T> implements Consumer<T> {
-
-        T obj;
-
-        boolean wasSetCalled;
-
-        public void accept(T obj) {
-            set(obj);
-        }
-
-        void set(T obj) {
-            wasSetCalled = true;
-            this.obj = obj;
-        }
-
-        boolean isSet() {
-            return obj != null || wasSetCalled;
-        }
-
-        void ifUnset(Runnable run) {
-            if (!isSet()) {
-                run.run();
-            }
-        }
-
-        T get(Runnable ifNull) {
-            if (!isSet()) {
-                ifNull.run();
-            }
-            return obj;
-        }
-
-        T get(String nullMessage) {
-            if (!isSet()) {
-                throw new IllegalStateException(nullMessage);
-            }
-            return obj;
-        }
-
-        T get(Supplier<String> nullMessage) {
-            if (!isSet()) {
-                throw new IllegalStateException(nullMessage.get());
-            }
-            return obj;
-        }
-
-        T get() {
-            return obj;
+            lines.statementTerminator();
         }
     }
 
@@ -9876,11 +9758,11 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
         }
     }
 
-    static final class BackupRaw implements BodyBuilder {
+    public static final class BackupAndAppendRaw implements BodyBuilder {
 
         private final String what;
 
-        BackupRaw(String what) {
+        BackupAndAppendRaw(String what) {
             this.what = what;
         }
 
@@ -9958,13 +9840,6 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember {
             }
         }
         return name;
-    }
-
-    private static <T> T notNull(String what, T obj) {
-        if (obj == null) {
-            throw new IllegalArgumentException(what + " may not be null");
-        }
-        return obj;
     }
 
     static BodyBuilder friendlyNumber(Number num) {

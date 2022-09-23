@@ -23,6 +23,7 @@
     <modules>
         <module>annotation-tools</module>
         <module>java-vogon</module>
+        <module>code-generation-common</module>
     </modules>
     <issueManagement>
         <system>Github</system>

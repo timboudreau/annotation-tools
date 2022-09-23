@@ -21,26 +21,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
+package com.mastfrog.code.generation.common.builder;
 
 /**
  *
  * @author Tim Boudreau
  */
-interface NamedMember {
+interface ClosableBuilder<T> {
 
-    String name();
-
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
-        }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
-    }
+    T close();
 }

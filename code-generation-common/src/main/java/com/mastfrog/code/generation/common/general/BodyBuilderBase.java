@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2022 Mastfrog Technologies.
+ * Copyright 2021 Mastfrog Technologies.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,26 +21,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
+package com.mastfrog.code.generation.common.general;
 
 import com.mastfrog.code.generation.common.BodyBuilder;
 
 /**
+ * Base class for BodyBuilders that implements toString() to emit the current
+ * state of the code it would generate. A useful pattern for code generators for
+ * different languages is to create a subclass of this that overrides
+ * newLineBuilder() to create an appropriate lines builder with indentation and
+ * similar settings for the given language, and then use that for most or all
+ * items.
  *
  * @author Tim Boudreau
  */
-interface NamedMember {
+public abstract class BodyBuilderBase implements BodyBuilder {
 
-    String name();
-
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
-        }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
+    @Override
+    public String toString() {
+        return stringify();
     }
 }

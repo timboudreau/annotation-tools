@@ -21,26 +21,30 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
+package com.mastfrog.code.generation.common.general;
 
 import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.LinesBuilder;
 
 /**
+ * Wrapper for another BodyBuilder which simply wraps the call to emit the
+ * wrapped BodyBuilder in a call to LinesBuilder.statement().
  *
  * @author Tim Boudreau
  */
-interface NamedMember {
+public class Statement extends BodyBuilderBase {
 
-    String name();
+    private final BodyBuilder wrapped;
 
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
-        }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
+    public Statement(BodyBuilder wrapped) {
+        this.wrapped = wrapped;
     }
+
+    @Override
+    public void buildInto(LinesBuilder lines) {
+        lines.statement(lb1 -> {
+            wrapped.buildInto(lb1);
+        });
+    }
+
 }

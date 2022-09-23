@@ -21,26 +21,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
-
-import com.mastfrog.code.generation.common.BodyBuilder;
+package com.mastfrog.code.generation.common.util;
 
 /**
  *
- * @author Tim Boudreau
+ * @author timb
  */
-interface NamedMember {
+public final class Utils {
 
-    String name();
-
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
+    public static <T> T notNull(String what, T obj) {
+        if (obj == null) {
+            throw new IllegalArgumentException(what + " may not be null");
         }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
+        return obj;
+    }
+
+    private Utils() {
+        throw new AssertionError();
     }
 }

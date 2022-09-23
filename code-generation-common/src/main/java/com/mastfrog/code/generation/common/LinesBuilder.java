@@ -1,29 +1,65 @@
-package com.mastfrog.java.vogon;
+/*
+ * The MIT License
+ *
+ * Copyright 2022 Mastfrog Technologies.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+package com.mastfrog.code.generation.common;
 
 import java.util.Arrays;
 import java.util.function.Consumer;
 
 /**
+ * Essentially, a smart StringBuilder that knows how to indent and separate
+ * various language constructs, escape strings, etc.
  *
  * @author Tim Boudreau
  */
-public class LinesBuilder {
+public final class LinesBuilder {
 
-    private final StringBuilder sb = new StringBuilder(512);
+    private final LinesSettings settings;
+    private final StringBuilder sb = new StringBuilder(4096);
     private int currIndent;
-    private final int indentBy;
-    private int maxLineLength = 80;
 
-    LinesBuilder(int indentBy) {
-        this.indentBy = indentBy;
+    public LinesBuilder(LinesSettings settings) {
+        this.settings = settings;
     }
 
-    LinesBuilder() {
-        this(4);
+    public LinesBuilder() {
+        this.settings = new JavaLinesSettings();
+    }
+
+    public LinesBuilder(int wrapPoint, int indent) {
+        this.settings = new JavaLinesSettings(wrapPoint, indent);
+    }
+
+    public LinesBuilder(int wrapPoint) {
+        this.settings = new JavaLinesSettings(wrapPoint, 4);
     }
 
     public int lineLimit() {
-        return maxLineLength;
+        return settings.wrapPoint();
+    }
+
+    public int indentBy() {
+        return settings.indentBy();
     }
 
     private int currLineLength() {
@@ -39,14 +75,14 @@ public class LinesBuilder {
     }
 
     private char[] newlineIndentChars() {
-        char[] c = new char[(currIndent * indentBy) + 1];
+        char[] c = new char[(currIndent * indentBy()) + 1];
         Arrays.fill(c, ' ');
         c[0] = '\n';
         return c;
     }
 
     private char[] doubleNewlineIndentChars() {
-        char[] c = new char[(currIndent * indentBy) + 2];
+        char[] c = new char[(currIndent * indentBy()) + 2];
         Arrays.fill(c, ' ');
         c[0] = '\n';
         c[1] = '\n';
@@ -54,7 +90,7 @@ public class LinesBuilder {
     }
 
     private char[] indent() {
-        char[] c = new char[indentBy];
+        char[] c = new char[indentBy()];
         Arrays.fill(c, ' ');
         return c;
     }
@@ -65,12 +101,13 @@ public class LinesBuilder {
     }
 
     private void maybeIndent(int pendingChars, boolean hanging) {
-        if (currLineLength() + pendingChars > maxLineLength && !isOnNewLine()) {
+        int wrapAt = settings.wrapPoint();
+        if (currLineLength() + pendingChars > wrapAt && !isOnNewLine()) {
             sb.append(newlineIndentChars());
             int len = currLineLength();
             for (int i = 1; i < wrapDepth; i++) {
-                int nextLen = len + this.indentBy;
-                if (nextLen + pendingChars < maxLineLength) {
+                int nextLen = len + this.indentBy();
+                if (nextLen + pendingChars < wrapAt) {
                     sb.append(this.indent());
                 } else {
                     break;
@@ -102,23 +139,11 @@ public class LinesBuilder {
             return this;
         }
         int pos = sb.length() - 1;
-        loop:
-        while (pos > 0) {
+        if (pos > 0) {
             char c = sb.charAt(pos);
-            switch (c) {
-                case '}':
-                case ';':
-                    maybeNewline();
-                    break loop;
-                case ' ':
-                case '\r':
-                case '\n':
-                case '\t':
-                    break;
-                default:
-                    break loop;
+            if (settings.indicatesNewlineNeededBeforeNextStatement(c)) {
+                maybeNewline();
             }
-            pos--;
         }
         return this;
     }
@@ -221,14 +246,15 @@ public class LinesBuilder {
 
     private boolean hr;
 
-    void hangingWrap(Consumer<LinesBuilder> c) {
+    public LinesBuilder hangingWrap(Consumer<LinesBuilder> c) {
         boolean old = hr;
         hr = true;
         c.accept(this);
         hr = old;
+        return this;
     }
 
-    void doubleHangingWrap(Consumer<LinesBuilder> c) {
+    public LinesBuilder doubleHangingWrap(Consumer<LinesBuilder> c) {
         boolean old = hr;
         hr = true;
         if (!old) {
@@ -239,6 +265,7 @@ public class LinesBuilder {
             currIndent -= 2;
         }
         hr = old;
+        return this;
     }
 
     private int wrapDepth;
@@ -266,14 +293,8 @@ public class LinesBuilder {
         if (sb.length() > 0) {
             char c = sb.charAt(sb.length() - 1);
             if (!Character.isWhitespace(c)) {
-                switch (c) {
-                    case '[':
-                    case '(':
-                    case '{':
-                    case '<':
-                        break;
-                    default:
-                        sb.append(' ');
+                if (!settings.isDelimiterPairOpening(c)) {
+                    sb.append(' ');
                 }
             }
         }
@@ -282,7 +303,9 @@ public class LinesBuilder {
     }
 
     public LinesBuilder appendStringLiteral(String literal) {
-        sb.append('"').append(escape(literal)).append('"');
+        sb.append(settings.stringLiteralQuote()).append(
+                settings.escapeStringLiteral(literal))
+                .append(settings.stringLiteralQuote());
         return this;
     }
 
@@ -358,17 +381,15 @@ public class LinesBuilder {
         int ix = -1;
         // Ensure commas and semicolons are attached to the
         // thing they delimit
-        switch (what) {
-            case ',':
-            case ';':
-                for (int i = sb.length() - 1; i >= 0; i--) {
-                    char c = sb.charAt(i);
-                    if (Character.isWhitespace(c)) {
-                        ix = i;
-                    } else if (!Character.isWhitespace(c)) {
-                        break;
-                    }
+        if (settings.isBackupABeforeAppendRaw(what)) {
+            for (int i = sb.length() - 1; i >= 0; i--) {
+                char c = sb.charAt(i);
+                if (Character.isWhitespace(c)) {
+                    ix = i;
+                } else if (!Character.isWhitespace(c)) {
+                    break;
                 }
+            }
         }
         if (ix > 0) {
             sb.insert(ix, what);
@@ -380,6 +401,8 @@ public class LinesBuilder {
 
     public LinesBuilder appendRaw(String what) {
         if (what.length() == 1) {
+            // use the special delimiter handling for single chars whether
+            // passed as char or string
             return appendRaw(what.charAt(0));
         }
         sb.append(what);
@@ -409,10 +432,8 @@ public class LinesBuilder {
             char c = sb.charAt(i);
             if (!Character.isWhitespace(c)) {
                 break;
-            }
-            switch (c) {
-                case '\n':
-                    return true;
+            } else if (c == '\n') {
+                return true;
             }
         }
         return false;
@@ -429,7 +450,7 @@ public class LinesBuilder {
     public LinesBuilder statement(String stmt) {
         maybeNewline();
         sb.append(stmt);
-        sb.append(';');
+        sb.append(settings.statementTerminator());
         return this;
     }
 
@@ -449,8 +470,8 @@ public class LinesBuilder {
         maybeNewline();
         wrappable(lp -> {
             c.accept(this);
-            if (lastChar() != ';') {
-                sb.append(';');
+            if (lastChar() != settings.statementTerminator()) {
+                sb.append(settings.statementTerminator());
             }
         });
         return this;
@@ -504,11 +525,29 @@ public class LinesBuilder {
         return delimit('{', '}', c);
     }
 
+    public LinesBuilder angleBrackets(Consumer<LinesBuilder> c) {
+        return delimit('<', '>', c);
+    }
+
+    public LinesBuilder backTicks(Consumer<LinesBuilder> c) {
+        return delimit('`', '`', c);
+    }
+
     public LinesBuilder commaDelimit(String... all) {
         for (int i = 0; i < all.length; i++) {
             word(all[i]);
             if (i != all.length - 1) {
                 sb.append(", ");
+            }
+        }
+        return this;
+    }
+
+    public LinesBuilder delimit(String delimiter, String... all) {
+        for (int i = 0; i < all.length; i++) {
+            word(all[i]);
+            if (i != all.length - 1) {
+                sb.append(delimiter);
             }
         }
         return this;
@@ -531,7 +570,7 @@ public class LinesBuilder {
     }
 
     public LinesBuilder block(boolean leadingNewline, Consumer<LinesBuilder> c) {
-        sb.append(" {");
+        sb.append(' ').append(settings.blockOpen());
         currIndent++;
         if (leadingNewline) {
             sb.append(doubleNewlineIndentChars());
@@ -543,12 +582,12 @@ public class LinesBuilder {
         } finally {
             currIndent--;
             maybeNewline();
-            int expectedLeadingSpaces = (currIndent * indentBy);
+            int expectedLeadingSpaces = (currIndent * settings.indentBy());
             int realLeadingSpaces = leadingSpaces();
             if (realLeadingSpaces > expectedLeadingSpaces) {
                 sb.setLength((sb.length() - (realLeadingSpaces - expectedLeadingSpaces)));
             }
-            sb.append('}');
+            sb.append(settings.blockClose());
             sb.append(newlineIndentChars());
         }
         return this;
@@ -588,6 +627,42 @@ public class LinesBuilder {
             }
         }
         sb.append(doubleNewlineIndentChars());
+        return this;
+    }
+
+    public LinesBuilder lineComment(String txt) {
+        return lineComment(false, txt);
+    }
+
+    public LinesBuilder lineComment(boolean trailing, String txt) {
+        if (trailing) {
+            backup().appendRaw(" ");
+        } else {
+            onNewLine();
+        }
+        for (String part : txt.split("\n")) {
+            part = part.trim();
+            if (part.isEmpty()) {
+                doubleNewline();
+            } else {
+                appendRaw(settings.lineCommentPrefix() + part);
+                onNewLine();
+            }
+        }
+        return this;
+    }
+
+    public LinesBuilder statementTerminator() {
+        char c = settings.statementTerminator();
+        if (c != 0) {
+            backup();
+            if (sb.length() > 0) {
+                char last = sb.charAt(sb.length() - 1);
+                if (last != c) {
+                    sb.append(c);
+                }
+            }
+        }
         return this;
     }
 

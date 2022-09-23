@@ -21,26 +21,43 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
+package com.mastfrog.code.generation.common.general;
 
 import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.LinesBuilder;
+import java.util.List;
 
 /**
+ * A generic BodyBuilder which encapsulates a bunch of child BodyBuilders but
+ * has no content of its own.
  *
- * @author Tim Boudreau
+ * @author timb
  */
-interface NamedMember {
+public final class Composite extends BodyBuilderBase {
 
-    String name();
+    final BodyBuilder[] contents;
 
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
-        }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
+    public Composite(BodyBuilder... all) {
+        this.contents = all;
     }
+
+    public Composite(List<? extends BodyBuilder> all) {
+        this.contents = all.toArray(new BodyBuilder[all.size()]);
+    }
+
+    public boolean isEmpty() {
+        return contents.length == 0;
+    }
+
+    public static Composite of(List<BodyBuilder> all) {
+        return new Composite(all.toArray(new BodyBuilder[all.size()]));
+    }
+
+    @Override
+    public void buildInto(LinesBuilder lines) {
+        for (BodyBuilder content : contents) {
+            content.buildInto(lines);
+        }
+    }
+
 }

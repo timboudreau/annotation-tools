@@ -21,26 +21,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
-
-import com.mastfrog.code.generation.common.BodyBuilder;
+package com.mastfrog.code.generation.common;
 
 /**
+ * Common cross-language settings for how things are delimited, indented,
+ * escaped and split.
  *
  * @author Tim Boudreau
  */
-interface NamedMember {
+public interface LinesSettings {
 
-    String name();
+    boolean isDelimiterPairOpening(char c);
 
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
-        }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
-    }
+    String stringLiteralQuote();
+
+    String escapeStringLiteral(String lit);
+
+    String escapeCharLitera(char c);
+
+    boolean isBackupABeforeAppendRaw(char c);
+
+    char statementTerminator();
+
+    boolean indicatesNewlineNeededBeforeNextStatement(char c);
+
+    char blockOpen();
+
+    char blockClose();
+    
+    int wrapPoint();
+    
+    int indentBy();
+    
+    String lineCommentPrefix();
 }

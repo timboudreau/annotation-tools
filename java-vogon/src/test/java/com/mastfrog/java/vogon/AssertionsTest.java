@@ -23,6 +23,8 @@
  */
 package com.mastfrog.java.vogon;
 
+import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.java.vogon.ClassBuilder.BlockBuilder;
 import com.mastfrog.java.vogon.ClassBuilder.MethodBuilder;
 import java.util.ArrayList;

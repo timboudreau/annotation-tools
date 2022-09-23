@@ -23,12 +23,21 @@
  */
 package com.mastfrog.java.vogon;
 
+import com.mastfrog.code.generation.common.LinesBuilder;
+
 /**
  *
  * @author Tim Boudreau
  */
- enum BitwiseOperators implements ClassBuilder.Operator {
-    OR("|"), AND("&"), XOR("^"), COMPLEMENT("~"), SHIFT_LEFT("<<"), SHIFT_RIGHT(">>"), ROTATE(">>>");
+enum BitwiseOperators implements ClassBuilder.Operator {
+    OR("|"),
+    AND("&"),
+    XOR("^"),
+    COMPLEMENT("~"),
+    SHIFT_LEFT("<<"),
+    SHIFT_RIGHT(">>"),
+    ROTATE(">>>");
+
     private final String stringRep;
 
     private BitwiseOperators(String stringRep) {

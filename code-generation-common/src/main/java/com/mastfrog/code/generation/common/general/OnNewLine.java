@@ -21,26 +21,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
+package com.mastfrog.code.generation.common.general;
 
 import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.LinesBuilder;
 
 /**
+ * Virtual element that simply guarantees the next content will appear on a new
+ * line in the generated source.
  *
  * @author Tim Boudreau
  */
-interface NamedMember {
+public class OnNewLine implements BodyBuilder {
 
-    String name();
-
-    static int compare(BodyBuilder a, BodyBuilder b) {
-        if (a instanceof NamedMember && b instanceof NamedMember) {
-            NamedMember nmA = (NamedMember) a;
-            NamedMember nmB = (NamedMember) b;
-            if (nmA.getClass() == nmB.getClass()) {
-                return nmA.name().compareTo(nmB.name());
-            }
-        }
-        return a.getClass().getSimpleName().compareTo(b.getClass().getSimpleName());
+    @Override
+    public void buildInto(LinesBuilder lines) {
+        lines.onNewLine();
     }
+
+    @Override
+    public String toString() {
+        return "\n";
+    }
+
 }

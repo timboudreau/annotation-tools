@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2021 Mastfrog Technologies.
+ * Copyright 2022 Mastfrog Technologies.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,18 +21,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.java.vogon;
+package com.mastfrog.code.generation.common.general;
+
+import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.LinesBuilder;
 
 /**
+ * BodyBuilder which simply calls Lines.doubleNewline().
  *
  * @author Tim Boudreau
  */
-abstract class BodyBuilderBase implements BodyBuilder {
+public final class DoubleNewline implements BodyBuilder {
+
+    @Override
+    public void buildInto(LinesBuilder lines) {
+        lines.doubleNewline();
+    }
 
     @Override
     public String toString() {
-        LinesBuilder lb = new LinesBuilder();
-        buildInto(lb);
-        return lb.toString();
+        return "\n\n";
     }
+
 }
