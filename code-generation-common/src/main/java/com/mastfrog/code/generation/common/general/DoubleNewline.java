@@ -23,18 +23,18 @@
  */
 package com.mastfrog.code.generation.common.general;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  * BodyBuilder which simply calls Lines.doubleNewline().
  *
  * @author Tim Boudreau
  */
-public final class DoubleNewline implements BodyBuilder {
+public final class DoubleNewline implements CodeGenerator {
 
     @Override
-    public void buildInto(LinesBuilder lines) {
+    public void generateInto(LinesBuilder lines) {
         lines.doubleNewline();
     }
 

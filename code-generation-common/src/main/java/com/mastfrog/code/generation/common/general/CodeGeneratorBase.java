@@ -23,7 +23,7 @@
  */
 package com.mastfrog.code.generation.common.general;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  * Base class for BodyBuilders that implements toString() to emit the current
@@ -35,7 +35,7 @@ import com.mastfrog.code.generation.common.BodyBuilder;
  *
  * @author Tim Boudreau
  */
-public abstract class BodyBuilderBase implements BodyBuilder {
+public abstract class CodeGeneratorBase implements CodeGenerator {
 
     @Override
     public String toString() {

@@ -23,17 +23,17 @@
  */
 package com.mastfrog.code.generation.common.builder;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.code.generation.common.util.Holder;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  *
  * @author Tim Boudreau
  */
-public abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>> implements BodyBuilder {
+public abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>> implements CodeGenerator {
 
     protected final Function<? super J, ? extends T> converter;
 
@@ -46,7 +46,7 @@ public abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>
         return (J) this;
     }
 
-    protected <B extends BodyBuilder, R extends BodyBuilder> R subBuilder(
+    protected <B extends CodeGenerator, R extends CodeGenerator> R subBuilder(
             Function<Function<? super B, ? extends T>, ? extends B> func,
             Function<? super B, ? extends R> onBuilt,
             Consumer<? super B> c) {
@@ -59,7 +59,7 @@ public abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>
         return hold.get(target.getClass().getSimpleName() + " not completed.");
     }
 
-    protected <B extends BodyBuilder> T closeableBuilder(
+    protected <B extends CodeGenerator> T closeableBuilder(
             Function<Function<? super B, ? extends T>, ? extends B> func,
             Consumer<? super B> onBuilt,
             Consumer<? super B> c) {
@@ -90,7 +90,7 @@ public abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>
     @Override
     public String toString() {
         LinesBuilder lb = new LinesBuilder();
-        buildInto(lb);
+        generateInto(lb);
         return lb.toString();
     }
 

@@ -23,7 +23,6 @@
  */
 package com.mastfrog.java.vogon;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.java.vogon.ClassBuilder.BlockBuilder;
 import com.mastfrog.java.vogon.ClassBuilder.MethodBuilder;
@@ -35,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  *
@@ -191,16 +191,16 @@ public class AssertionsTest {
         assertTrue(found, "Did not find line '" + text + "' in " + cb);
     }
 
-    static final class ProbeImpl implements BiConsumer<BlockBuilder<?>, BodyBuilder> {
+    static final class ProbeImpl implements BiConsumer<BlockBuilder<?>, CodeGenerator> {
 
         List<String> additions = new ArrayList<>();
-        List<BodyBuilder> statements = new ArrayList<>();
+        List<CodeGenerator> statements = new ArrayList<>();
         List<Exception> addedAt = new ArrayList<>();
 
         @Override
-        public void accept(BlockBuilder t, BodyBuilder u) {
+        public void accept(BlockBuilder t, CodeGenerator u) {
             LinesBuilder lb = new LinesBuilder(4);
-            u.buildInto(lb);
+            u.generateInto(lb);
             String body = lb.toString();
             statements.add(u);
             additions.add(body);

@@ -33,7 +33,7 @@ import java.util.Objects;
  *
  * @author Tim Boudreau
  */
-public final class Adhoc extends BodyBuilderBase {
+public final class Adhoc extends CodeGeneratorBase {
 
     private final String what;
     private boolean hangingWrap;
@@ -52,7 +52,7 @@ public final class Adhoc extends BodyBuilderBase {
     }
 
     @Override
-    public void buildInto(LinesBuilder lines) {
+    public void generateInto(LinesBuilder lines) {
         lines.word(what, hangingWrap);
     }
 

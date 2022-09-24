@@ -23,7 +23,7 @@
  */
 package com.mastfrog.java.vogon;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  *
@@ -33,7 +33,7 @@ interface NamedMember {
 
     String name();
 
-    static int compare(BodyBuilder a, BodyBuilder b) {
+    static int compare(CodeGenerator a, CodeGenerator b) {
         if (a instanceof NamedMember && b instanceof NamedMember) {
             NamedMember nmA = (NamedMember) a;
             NamedMember nmB = (NamedMember) b;

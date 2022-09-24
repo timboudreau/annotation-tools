@@ -31,7 +31,7 @@ import java.util.function.Supplier;
  *
  * @author Tim Boudreau
  */
-public interface BodyBuilder {
+public interface CodeGenerator {
 
     /**
      * Drive the passed LinesBuilder to append the contents of this element to
@@ -39,11 +39,11 @@ public interface BodyBuilder {
      *
      * @param lines A LinesBuilder
      */
-    void buildInto(LinesBuilder lines);
+    void generateInto(LinesBuilder lines);
 
-    public static BodyBuilder lazy(Supplier<BodyBuilder> s) {
+    public static CodeGenerator lazy(Supplier<CodeGenerator> s) {
         return lb -> {
-            s.get().buildInto(lb);
+            s.get().generateInto(lb);
         };
     }
 
@@ -66,7 +66,7 @@ public interface BodyBuilder {
      */
     default String stringify() {
         LinesBuilder lb = newLinesBuilder();
-        buildInto(lb);
+        generateInto(lb);
         return lb.toString();
     }
 }

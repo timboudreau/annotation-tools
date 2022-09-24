@@ -23,9 +23,9 @@
  */
 package com.mastfrog.code.generation.common.general;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
 import java.util.List;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  * A generic BodyBuilder which encapsulates a bunch of child BodyBuilders but
@@ -33,30 +33,30 @@ import java.util.List;
  *
  * @author timb
  */
-public final class Composite extends BodyBuilderBase {
+public final class Composite extends CodeGeneratorBase {
 
-    final BodyBuilder[] contents;
+    final CodeGenerator[] contents;
 
-    public Composite(BodyBuilder... all) {
+    public Composite(CodeGenerator... all) {
         this.contents = all;
     }
 
-    public Composite(List<? extends BodyBuilder> all) {
-        this.contents = all.toArray(new BodyBuilder[all.size()]);
+    public Composite(List<? extends CodeGenerator> all) {
+        this.contents = all.toArray(new CodeGenerator[all.size()]);
     }
 
     public boolean isEmpty() {
         return contents.length == 0;
     }
 
-    public static Composite of(List<BodyBuilder> all) {
-        return new Composite(all.toArray(new BodyBuilder[all.size()]));
+    public static Composite of(List<CodeGenerator> all) {
+        return new Composite(all.toArray(new CodeGenerator[all.size()]));
     }
 
     @Override
-    public void buildInto(LinesBuilder lines) {
-        for (BodyBuilder content : contents) {
-            content.buildInto(lines);
+    public void generateInto(LinesBuilder lines) {
+        for (CodeGenerator content : contents) {
+            content.generateInto(lines);
         }
     }
 

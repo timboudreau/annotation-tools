@@ -669,10 +669,10 @@ public final class LinesBuilder {
         return this;
     }
 
-    public LinesBuilder joining(String joinWith, Iterable<? extends BodyBuilder> l) {
-        for (Iterator<? extends BodyBuilder> it = l.iterator(); it.hasNext();) {
-            BodyBuilder bb = it.next();
-            bb.buildInto(this);
+    public LinesBuilder joining(String joinWith, Iterable<? extends CodeGenerator> l) {
+        for (Iterator<? extends CodeGenerator> it = l.iterator(); it.hasNext();) {
+            CodeGenerator bb = it.next();
+            bb.generateInto(this);
             if (it.hasNext()) {
                 word(joinWith);
             }

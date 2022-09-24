@@ -23,8 +23,8 @@
  */
 package com.mastfrog.code.generation.common.general;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  * Wrapper for another BodyBuilder which simply wraps the call to emit the
@@ -32,18 +32,18 @@ import com.mastfrog.code.generation.common.LinesBuilder;
  *
  * @author Tim Boudreau
  */
-public class Statement extends BodyBuilderBase {
+public class Statement extends CodeGeneratorBase {
 
-    private final BodyBuilder wrapped;
+    private final CodeGenerator wrapped;
 
-    public Statement(BodyBuilder wrapped) {
+    public Statement(CodeGenerator wrapped) {
         this.wrapped = wrapped;
     }
 
     @Override
-    public void buildInto(LinesBuilder lines) {
+    public void generateInto(LinesBuilder lines) {
         lines.statement(lb1 -> {
-            wrapped.buildInto(lb1);
+            wrapped.generateInto(lb1);
         });
     }
 

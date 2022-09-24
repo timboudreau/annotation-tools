@@ -23,13 +23,13 @@
  */
 package com.mastfrog.java.vogon;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.java.vogon.ClassBuilder.GenericTypeVisitor;
 import java.util.ArrayList;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  *
@@ -43,9 +43,9 @@ public class TypeDerivationTest {
         GenericTypeVisitor v = new GenericTypeVisitor();
         ClassBuilder.visitGenericTypes(sig, 0, v);
 
-        BodyBuilder bb = v.result();
+        CodeGenerator bb = v.result();
         LinesBuilder lb = new LinesBuilder();
-        bb.buildInto(lb);
+        bb.generateInto(lb);
 
         String g = lb.toString();
 
@@ -89,9 +89,9 @@ public class TypeDerivationTest {
         GenericTypeVisitor v = new GenericTypeVisitor();
         ClassBuilder.visitGenericTypes(nm, 0, v);
 
-        BodyBuilder bb = v.result();
+        CodeGenerator bb = v.result();
         LinesBuilder lb = new LinesBuilder();
-        bb.buildInto(lb);
+        bb.generateInto(lb);
 
         String g = lb.toString();
 
@@ -106,9 +106,9 @@ public class TypeDerivationTest {
         GenericTypeVisitor v = new GenericTypeVisitor();
         ClassBuilder.visitGenericTypes(nm, 0, v);
 
-        BodyBuilder bb = v.result();
+        CodeGenerator bb = v.result();
         LinesBuilder lb = new LinesBuilder();
-        bb.buildInto(lb);
+        bb.generateInto(lb);
 
         String g = lb.toString();
         assertFalse(g.trim().endsWith(","), g);

@@ -23,8 +23,8 @@
  */
 package com.mastfrog.code.generation.common.general;
 
-import com.mastfrog.code.generation.common.BodyBuilder;
 import com.mastfrog.code.generation.common.LinesBuilder;
+import com.mastfrog.code.generation.common.CodeGenerator;
 
 /**
  * Virtual element that simply guarantees the next content will appear on a new
@@ -32,10 +32,10 @@ import com.mastfrog.code.generation.common.LinesBuilder;
  *
  * @author Tim Boudreau
  */
-public class OnNewLine implements BodyBuilder {
+public class OnNewLine implements CodeGenerator {
 
     @Override
-    public void buildInto(LinesBuilder lines) {
+    public void generateInto(LinesBuilder lines) {
         lines.onNewLine();
     }
 

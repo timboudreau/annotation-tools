@@ -45,7 +45,7 @@ enum BitwiseOperators implements ClassBuilder.Operator {
     }
 
     @Override
-    public void buildInto(LinesBuilder lines) {
+    public void generateInto(LinesBuilder lines) {
         lines.word(toString() + " ");
     }
 

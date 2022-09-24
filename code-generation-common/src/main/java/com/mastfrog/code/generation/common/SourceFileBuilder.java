@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
  *
  * @author Tim Boudreau
  */
-public interface SourceFileBuilder extends BodyBuilder {
+public interface SourceFileBuilder extends CodeGenerator {
 
     /**
      * The name of the top level member of the class, such as a Java class name,

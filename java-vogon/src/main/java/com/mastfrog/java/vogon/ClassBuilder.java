@@ -1,11 +1,11 @@
 package com.mastfrog.java.vogon;
 
 import com.mastfrog.code.generation.common.general.Statement;
-import com.mastfrog.code.generation.common.general.BodyBuilderBase;
+import com.mastfrog.code.generation.common.general.CodeGeneratorBase;
 import com.mastfrog.code.generation.common.general.DoubleNewline;
 import com.mastfrog.code.generation.common.general.Composite;
 import com.mastfrog.code.generation.common.general.Adhoc;
-import com.mastfrog.code.generation.common.BodyBuilder;
+import com.mastfrog.code.generation.common.CodeGenerator;
 import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.code.generation.common.SourceFileBuilder;
 import com.mastfrog.code.generation.common.util.Holder;
@@ -52,19 +52,19 @@ import static javax.lang.model.element.Modifier.VOLATILE;
  *
  * @author Tim Boudreau
  */
-public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFileBuilder {
+public final class ClassBuilder<T> implements CodeGenerator, NamedMember, SourceFileBuilder {
 
     private final String name;
     private final String pkg;
     private final List<ConstructorBuilder<?>> constructors = new LinkedList<>();
     private EnumConstantBuilder<ClassBuilder<T>> constants;
-    private final List<BodyBuilder> members = new LinkedList<>();
+    private final List<CodeGenerator> members = new LinkedList<>();
     private final Set<String> imports = new TreeSet<>();
     private final Set<Modifier> modifiers = new TreeSet<>();
     private final Function<ClassBuilder<T>, T> converter;
     private String extendsType;
     private final Set<String> implementsTypes = new LinkedHashSet<>();
-    private final Set<BodyBuilder> annotations = new LinkedHashSet<>();
+    private final Set<CodeGenerator> annotations = new LinkedHashSet<>();
     private String docComment;
     private String classType = "class";
     private boolean loggerField;
@@ -113,7 +113,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     public ClassBuilder<T> sortMembers() {
         members.sort(NamedMember::compare);
-        for (BodyBuilder bb : members) {
+        for (CodeGenerator bb : members) {
             if (bb instanceof ClassBuilder<?>) {
                 ((ClassBuilder<?>) bb).sortMembers();
             }
@@ -123,7 +123,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     public String unusedFieldName(String field) {
         Set<String> all = new HashSet<>();
-        for (BodyBuilder b : members) {
+        for (CodeGenerator b : members) {
             if (b instanceof FieldBuilder<?>) {
                 FieldBuilder<?> fb = (FieldBuilder<?>) b;
                 all.add(fb.name);
@@ -137,7 +137,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     public String unusedMethodName(String field) {
         Set<String> all = new HashSet<>();
-        for (BodyBuilder b : members) {
+        for (CodeGenerator b : members) {
             if (b instanceof MethodBuilder<?>) {
                 MethodBuilder<?> mb = (MethodBuilder<?>) b;
                 all.add(mb.name);
@@ -211,12 +211,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     }
 
     String methodSource(String name) { // for tests
-        for (BodyBuilder bb : members) {
+        for (CodeGenerator bb : members) {
             if (bb instanceof MethodBuilder<?>) {
                 MethodBuilder<?> mb = (MethodBuilder<?>) bb;
                 if (name.equals(mb.name)) {
                     LinesBuilder lb = new LinesBuilder();
-                    mb.buildInto(lb);
+                    mb.generateInto(lb);
                     return lb.toString();
                 }
             }
@@ -387,7 +387,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     }
 
     public boolean containsMethodNamed(String name) {
-        for (BodyBuilder bb : this.members) {
+        for (CodeGenerator bb : this.members) {
             if (bb instanceof MethodBuilder) {
                 if (name.equals(((MethodBuilder) bb).name)) {
                     return true;
@@ -398,7 +398,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     }
 
     public boolean containsFieldNamed(String name) {
-        for (BodyBuilder bb : this.members) {
+        for (CodeGenerator bb : this.members) {
             if (bb instanceof FieldBuilder) {
                 if (name.equals(((FieldBuilder) bb).name)) {
                     return true;
@@ -645,7 +645,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static NewBuilder<String> constructionFragment() {
         return new NewBuilder<>(nb -> {
             LinesBuilder lb = new LinesBuilder();
-            nb.buildInto(lb);
+            nb.generateInto(lb);
             return lb.toString();
         });
     }
@@ -653,7 +653,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static InvocationBuilder<String> invocationFragment(String method) {
         return new InvocationBuilder<>(ib -> {
             LinesBuilder lb = new LinesBuilder();
-            ib.buildInto(lb);
+            ib.generateInto(lb);
             return lb.toString();
         }, method);
     }
@@ -661,17 +661,17 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static ArrayValueBuilder<String> arrayFragment() {
         return new ArrayValueBuilder<>(nb -> {
             LinesBuilder lb = new LinesBuilder();
-            nb.buildInto(lb);
+            nb.generateInto(lb);
             return lb.toString();
         });
     }
 
-    public static final class AnnotatedArgumentBuilder<T> implements BodyBuilder {
+    public static final class AnnotatedArgumentBuilder<T> implements CodeGenerator {
 
-        private final List<BodyBuilder> annotations = new ArrayList<>();
-        private final Function<BodyBuilder, T> converter;
+        private final List<CodeGenerator> annotations = new ArrayList<>();
+        private final Function<CodeGenerator, T> converter;
 
-        AnnotatedArgumentBuilder(Function<BodyBuilder, T> converter) {
+        AnnotatedArgumentBuilder(Function<CodeGenerator, T> converter) {
             this.converter = converter;
         }
 
@@ -702,26 +702,26 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
 
         }
     }
 
-    static class AnnotationsAndType extends BodyBuilderBase {
+    static class AnnotationsAndType extends CodeGeneratorBase {
 
         private final String type;
-        private final List<BodyBuilder> all;
+        private final List<CodeGenerator> all;
 
-        AnnotationsAndType(String type, List<BodyBuilder> all) {
+        AnnotationsAndType(String type, List<CodeGenerator> all) {
             this.type = type;
             this.all = new ArrayList<>(all);
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.hangingWrap(lb -> {
-                for (BodyBuilder bb : all) {
-                    bb.buildInto(lb);
+                for (CodeGenerator bb : all) {
+                    bb.generateInto(lb);
                 }
                 lb.word(type);
             });
@@ -742,10 +742,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class EnumConstantBuilder<T> extends BodyBuilderBase {
+    public static final class EnumConstantBuilder<T> extends CodeGeneratorBase {
 
         private final Function<EnumConstantBuilder<T>, T> converter;
-        private final Set<BodyBuilder> constants = new LinkedHashSet<>();
+        private final Set<CodeGenerator> constants = new LinkedHashSet<>();
         private String docComment;
 
         EnumConstantBuilder(Function<EnumConstantBuilder<T>, T> converter) {
@@ -792,14 +792,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (docComment != null) {
                 writeDocComment(docComment, lines);
             }
-            Iterator<BodyBuilder> it = constants.iterator();
+            Iterator<CodeGenerator> it = constants.iterator();
             while (it.hasNext()) {
-                BodyBuilder bb = it.next();
-                bb.buildInto(lines);
+                CodeGenerator bb = it.next();
+                bb.generateInto(lines);
                 if (it.hasNext()) {
                     lines.appendRaw(",");
                 }
@@ -811,12 +811,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class ConstructorBuilder<T> extends BodyBuilderBase {
+    public static final class ConstructorBuilder<T> extends CodeGeneratorBase {
 
         private final Function<ConstructorBuilder<T>, T> converter;
         private BlockBuilder<?> body;
         private final Set<AnnotationBuilder<?>> annotations = new LinkedHashSet<>();
-        private final Map<BodyBuilder, BodyBuilder> arguments = new LinkedHashMap<>();
+        private final Map<CodeGenerator, CodeGenerator> arguments = new LinkedHashMap<>();
         private final Set<Modifier> modifiers = EnumSet.noneOf(Modifier.class);
         private final Set<String> throwing = new TreeSet<>();
         private StringBuilder docComment;
@@ -976,12 +976,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.parens(lb -> {
-                for (Iterator<Map.Entry<BodyBuilder, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                    Map.Entry<BodyBuilder, BodyBuilder> e = it.next();
-                    e.getValue().buildInto(lb);
-                    e.getKey().buildInto(lb);
+                for (Iterator<Map.Entry<CodeGenerator, CodeGenerator>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                    Map.Entry<CodeGenerator, CodeGenerator> e = it.next();
+                    e.getValue().generateInto(lb);
+                    e.getKey().generateInto(lb);
                     if (it.hasNext()) {
                         lb.appendRaw(",");
                     }
@@ -998,7 +998,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 }
             }
             if (body != null) {
-                body.buildInto(lines);
+                body.generateInto(lines);
             } else {
                 lines.appendRaw(";");
             }
@@ -1035,14 +1035,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 lb.backup().onNewLine();
             }
             for (AnnotationBuilder<?> ab : annotations) {
-                ab.buildInto(lb);
+                ab.generateInto(lb);
                 lb.onNewLine();
             }
             for (Modifier m : modifiers) {
                 lb.word(m.toString());
             }
             lb.word(name);
-            buildInto(lb);
+            generateInto(lb);
         }
 
         @Override
@@ -1069,10 +1069,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
         private String sig() {
             LinesBuilder lb = new LinesBuilder();
-            for (Iterator<Map.Entry<BodyBuilder, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                Map.Entry<BodyBuilder, BodyBuilder> e = it.next();
-                e.getValue().buildInto(lb);
-                e.getKey().buildInto(lb);
+            for (Iterator<Map.Entry<CodeGenerator, CodeGenerator>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                Map.Entry<CodeGenerator, CodeGenerator> e = it.next();
+                e.getValue().generateInto(lb);
+                e.getKey().generateInto(lb);
                 if (it.hasNext()) {
                     lb.appendRaw(',');
                 }
@@ -1084,7 +1084,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static final class TypeNameBuilder<T> {
 
         private final Function<TypeNameBuilder<T>, T> converter;
-        BodyBuilder type;
+        CodeGenerator type;
 
         TypeNameBuilder(Function<TypeNameBuilder<T>, T> converter) {
             this.converter = converter;
@@ -1096,19 +1096,19 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    private static final class Multi implements BodyBuilder {
+    private static final class Multi implements CodeGenerator {
 
-        private final List<BodyBuilder> items = new ArrayList<>();
+        private final List<CodeGenerator> items = new ArrayList<>();
 
-        Multi(List<? extends BodyBuilder> all) {
+        Multi(List<? extends CodeGenerator> all) {
             this.items.addAll(all);
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
 //            lines.hangingWrap(lb -> {
-            for (BodyBuilder bb : items) {
-                bb.buildInto(lines);
+            for (CodeGenerator bb : items) {
+                bb.generateInto(lines);
                 lines.appendRaw(' ');
             }
 //            });
@@ -1124,8 +1124,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             this.converter = converter;
         }
 
-        BodyBuilder appendingType(BodyBuilder type) {
-            List<BodyBuilder> nue = new ArrayList<>(annotations);
+        CodeGenerator appendingType(CodeGenerator type) {
+            List<CodeGenerator> nue = new ArrayList<>(annotations);
             nue.add(type);
             return new Multi(nue);
         }
@@ -1265,7 +1265,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     }
 
     @Override
-    public void buildInto(LinesBuilder lines) {
+    public void generateInto(LinesBuilder lines) {
         lines.onNewLine();
         if (constants != null && !"enum".equals(classType)) {
             throw new IllegalStateException(name + " is a " + classType
@@ -1285,9 +1285,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
         writeDocComment(lines);
         if (!annotations.isEmpty()) {
-            for (BodyBuilder anno : annotations) {
+            for (CodeGenerator anno : annotations) {
                 lines.onNewLine();
-                anno.buildInto(lines);
+                anno.generateInto(lines);
             }
             lines.onNewLine();
         }
@@ -1341,7 +1341,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
         lines.block(true, (lb) -> {
             if (constants != null) {
-                constants.buildInto(lines);
+                constants.generateInto(lines);
             }
             if (loggerField && converter.getClass() == ClassBuilderStringFunction.class) {
                 FieldBuilder<Void> fb = new FieldBuilder<>(f -> {
@@ -1350,7 +1350,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 fb.withModifier(PRIVATE).withModifier(STATIC).withModifier(FINAL)
                         .initializedTo("Logger.getLogger(" + LinesBuilder.stringLiteral(fqn()) + ")")
                         .ofType("Logger");
-                fb.buildInto(lines);
+                fb.generateInto(lines);
                 if (generateDebugCode) {
                     lines.onNewLine();
                     lines.word("static");
@@ -1362,7 +1362,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 }
             }
             boolean foundFields = false;
-            for (BodyBuilder bb : this.members) {
+            for (CodeGenerator bb : this.members) {
                 List<FieldBuilder<?>> staticFields = new ArrayList<>();
                 List<FieldBuilder<?>> instanceFields = new ArrayList<>();
 
@@ -1376,12 +1376,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 }
                 if (!staticFields.isEmpty()) {
                     for (FieldBuilder<?> st : staticFields) {
-                        st.buildInto(lb);
+                        st.generateInto(lb);
                     }
                     lb.doubleNewline();
                 }
                 for (FieldBuilder<?> i : instanceFields) {
-                    i.buildInto(lb);
+                    i.generateInto(lb);
                 }
                 foundFields = !staticFields.isEmpty() || !instanceFields.isEmpty();
             }
@@ -1396,9 +1396,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             if (foundConstructors) {
                 lb.doubleNewline();
             }
-            for (BodyBuilder bb : this.members) {
+            for (CodeGenerator bb : this.members) {
                 if (!(bb instanceof FieldBuilder<?>)) {
-                    bb.buildInto(lines);
+                    bb.generateInto(lines);
                 }
             }
         });
@@ -1406,7 +1406,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     public String text() {
         LinesBuilder lb = new LinesBuilder();
-        buildInto(lb);
+        generateInto(lb);
         return lb.toString();
     }
 
@@ -1528,12 +1528,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         return method(name).withModifier(PROTECTED).annotatedWith("Override").closeAnnotation();
     }
 
-    private boolean contains(BodyBuilder bb) {
+    private boolean contains(CodeGenerator bb) {
         // Usualy, repeated add bugs will be on the most recent element
         // so faster toExpression start from the last
         int max = members.size();
         for (int i = max - 1; i >= 0; i--) {
-            BodyBuilder b = members.get(i);
+            CodeGenerator b = members.get(i);
             if (b == bb || b.equals(bb)) {
                 return true;
             }
@@ -1604,12 +1604,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      *
      * @param <T> The return type when built
      */
-    public static final class FieldReferenceBuilder<T> extends BodyBuilderBase {
+    public static final class FieldReferenceBuilder<T> extends CodeGeneratorBase {
 
         private final String name;
-        private BodyBuilder referent;
+        private CodeGenerator referent;
         private final Function<FieldReferenceBuilder<T>, T> converter;
-        private final List<BodyBuilder> arrayElements = new ArrayList<>();
+        private final List<CodeGenerator> arrayElements = new ArrayList<>();
 
         FieldReferenceBuilder(String name, Function<FieldReferenceBuilder<T>, T> converter) {
             this.name = name;
@@ -1623,7 +1623,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             return converter.apply(this);
         }
 
-        private T setReferent(BodyBuilder bb) {
+        private T setReferent(CodeGenerator bb) {
             this.referent = bb;
             return converter.apply(this);
         }
@@ -1689,11 +1689,11 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            referent.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            referent.generateInto(lines);
             lines.backup().appendRaw('.').backup();
             lines.appendRaw(name);
-            for (BodyBuilder index : arrayElements) {
+            for (CodeGenerator index : arrayElements) {
                 lines.backup().appendRaw("[" + index + "]");
             }
         }
@@ -1706,12 +1706,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      *
      * @param <T>
      */
-    public static final class AnnotationMethodBuilder<T> extends BodyBuilderBase {
+    public static final class AnnotationMethodBuilder<T> extends CodeGeneratorBase {
 
         private final Function<? super AnnotationMethodBuilder<T>, T> converter;
         private final String name;
-        private BodyBuilder defaultValue;
-        private BodyBuilder type;
+        private CodeGenerator defaultValue;
+        private CodeGenerator type;
 
         AnnotationMethodBuilder(Function<? super AnnotationMethodBuilder<T>, T> converter, String name) {
             this.converter = converter;
@@ -1719,14 +1719,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
-            type.buildInto(lines);
+            type.generateInto(lines);
             lines.word(name);
             lines.appendRaw("()");
             if (defaultValue != null) {
                 lines.word("default");
-                defaultValue.buildInto(lines);
+                defaultValue.generateInto(lines);
             }
             lines.statementTerminator();
         }
@@ -1973,13 +1973,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      *
      * @param <T> The type it builds
      */
-    public static final class MethodBuilder<T> extends BodyBuilderBase implements NamedMember {
+    public static final class MethodBuilder<T> extends CodeGeneratorBase implements NamedMember {
 
         private final Function<MethodBuilder<T>, T> converter;
         private final Set<Modifier> modifiers = new TreeSet<>();
         private final Set<String> typeParams = new LinkedHashSet<>();
-        private final Set<BodyBuilder> annotations = new LinkedHashSet<>();
-        private final Set<BodyBuilder> throwing = new LinkedHashSet<>();
+        private final Set<CodeGenerator> annotations = new LinkedHashSet<>();
+        private final Set<CodeGenerator> throwing = new LinkedHashSet<>();
         private BlockBuilderBase block;
         private String type = "void";
         private final String name;
@@ -2152,7 +2152,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
          * @return A block
          */
         public BlockBuilder<T> addVarArgArgument(String type, String name) {
-            BodyBuilder typeBody = new VarArgType(type);
+            CodeGenerator typeBody = new VarArgType(type);
 //            BodyBuilder var = new Adhoc(checkIdentifier(notNull("name", name)));
             args.add(new ArgPair(typeBody, name));
             return body();
@@ -2167,7 +2167,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
          * @return A block
          */
         public T addVarArgArgument(String type, String name, Consumer<BlockBuilder<?>> c) {
-            BodyBuilder typeBody = new VarArgType(type);
+            CodeGenerator typeBody = new VarArgType(type);
             args.add(new ArgPair(typeBody, name));
             return body(c);
         }
@@ -2203,33 +2203,33 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             return this;
         }
 
-        private static final class ArgPair extends BodyBuilderBase {
+        private static final class ArgPair extends CodeGeneratorBase {
 
-            private final BodyBuilder type;
-            private final BodyBuilder name;
+            private final CodeGenerator type;
+            private final CodeGenerator name;
 
-            ArgPair(BodyBuilder type, BodyBuilder name) {
+            ArgPair(CodeGenerator type, CodeGenerator name) {
                 this.type = type;
                 this.name = name;
             }
 
-            ArgPair(BodyBuilder type, String name) {
+            ArgPair(CodeGenerator type, String name) {
                 this.type = type;
                 this.name = new Adhoc(checkIdentifier(name));
             }
 
             @Override
-            public void buildInto(LinesBuilder lines) {
-                type.buildInto(lines);
-                name.buildInto(lines);
+            public void generateInto(LinesBuilder lines) {
+                type.generateInto(lines);
+                name.generateInto(lines);
             }
         }
 
-        private static final class VarArgType extends BodyBuilderBase {
+        private static final class VarArgType extends CodeGeneratorBase {
 
-            private final BodyBuilder type;
+            private final CodeGenerator type;
 
-            VarArgType(BodyBuilder type) {
+            VarArgType(CodeGenerator type) {
                 this.type = type;
             }
 
@@ -2238,8 +2238,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             }
 
             @Override
-            public void buildInto(LinesBuilder lines) {
-                type.buildInto(lines);
+            public void generateInto(LinesBuilder lines) {
+                type.generateInto(lines);
                 lines.backup().appendRaw("...");
             }
         }
@@ -2330,15 +2330,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.doubleNewline();
             if (docComment != null) {
                 writeDocComment(docComment, lines);
                 lines.onNewLine();
             }
             if (!annotations.isEmpty()) {
-                for (BodyBuilder bb : annotations) {
-                    bb.buildInto(lines);
+                for (CodeGenerator bb : annotations) {
+                    bb.generateInto(lines);
                 }
             }
             for (Modifier m : modifiers) {
@@ -2372,7 +2372,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 lines.parens(lb -> {
                     for (Iterator<ArgPair> it = args.iterator(); it.hasNext();) {
                         ArgPair curr = it.next();
-                        curr.buildInto(lb);
+                        curr.generateInto(lb);
                         if (it.hasNext()) {
                             lb.appendRaw(',');
                         }
@@ -2380,9 +2380,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 });
                 if (!throwing.isEmpty()) {
                     ll.word("throws");
-                    for (Iterator<BodyBuilder> it = throwing.iterator(); it.hasNext();) {
-                        BodyBuilder th = it.next();
-                        th.buildInto(ll);
+                    for (Iterator<CodeGenerator> it = throwing.iterator(); it.hasNext();) {
+                        CodeGenerator th = it.next();
+                        th.generateInto(ll);
                         if (it.hasNext()) {
                             ll.appendRaw(",");
                         }
@@ -2395,7 +2395,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                     if (block.statements.isEmpty()) {
                         lines.onNewLine().appendRaw("// do nothing");
                     } else {
-                        block.buildInto(lb);
+                        block.generateInto(lb);
                     }
                 });
             } else {
@@ -2409,7 +2409,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             LinesBuilder lb = new LinesBuilder();
             for (Iterator<ArgPair> it = args.iterator(); it.hasNext();) {
                 ArgPair curr = it.next();
-                curr.buildInto(lb);
+                curr.generateInto(lb);
                 if (it.hasNext()) {
                     lb.appendRaw(',');
                 }
@@ -2452,18 +2452,18 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     private static final Pattern ARRAY = Pattern.compile("\\s*?(.*?)\\s*?(\\[.*\\])\\s*?");
     private static final Pattern VARARG = Pattern.compile("\\s*?(.*?)\\s*?\\.\\.\\.");
 
-    static BodyBuilder parseTypeName(String typeName) {
+    static CodeGenerator parseTypeName(String typeName) {
         Matcher arrM = ARRAY.matcher(notNull("typeName", typeName));
         if (arrM.find()) {
             String tn = arrM.group(1);
             String arrDecl = arrM.group(2);
-            BodyBuilder result = parseTypeName(tn);
+            CodeGenerator result = parseTypeName(tn);
             return new Composite(result, new BackupAndAppendRaw(arrDecl));
         }
         arrM = VARARG.matcher(typeName);
         if (arrM.find()) {
             String tn = arrM.group(1);
-            BodyBuilder result = parseTypeName(tn);
+            CodeGenerator result = parseTypeName(tn);
             return new Composite(result, new BackupAndAppendRaw("..."));
         }
         if (checkIdentifier(typeName).indexOf('<') >= 0) {
@@ -2490,7 +2490,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 //        System.out.println(nm);
 //    }
 //
-    static class TypeNameItem extends BodyBuilderBase {
+    static class TypeNameItem extends CodeGeneratorBase {
 
         private final String name;
 
@@ -2499,7 +2499,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word(name, '<', true);
         }
 
@@ -2527,7 +2527,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     }
 
-    static class Punctuation extends BodyBuilderBase {
+    static class Punctuation extends CodeGeneratorBase {
 
         private final char txt;
 
@@ -2541,7 +2541,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.backup();
             lines.appendRaw(txt);
         }
@@ -2578,15 +2578,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         private static final Punctuation CLOSE_ANGLE = new Punctuation('>');
         private static final Punctuation COMMA = new Punctuation(',');
 
-        private final List<BodyBuilder> items = new ArrayList<>();
+        private final List<CodeGenerator> items = new ArrayList<>();
 
         private int countForDepth(int depth) {
             return depthCounts.getOrDefault(depth, 0);
         }
 
-        public BodyBuilder result() {
+        public CodeGenerator result() {
             done();
-            return new Composite(items.toArray(new BodyBuilder[items.size()]));
+            return new Composite(items.toArray(new CodeGenerator[items.size()]));
         }
 
         private void add(int depth, String type) {
@@ -2706,8 +2706,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         });
 
     }
-    private static BodyBuilder RAW_BRACKETS = new BackupAndAppendRaw("[]");
-    private static BodyBuilder WRAPPABLE_BRACKETS = new Adhoc("[]");
+    private static CodeGenerator RAW_BRACKETS = new BackupAndAppendRaw("[]");
+    private static CodeGenerator WRAPPABLE_BRACKETS = new Adhoc("[]");
 
     /**
      * Gen an array literal or dimensions builder, generate the front half of a
@@ -2719,8 +2719,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      * @param alb The builder
      * @return A composite
      */
-    private static <T> BodyBuilder typeAndDimensions(ArrayDeclarationBuilder<T> alb) {
-        List<BodyBuilder> declarationWithDimensions = new ArrayList<>();
+    private static <T> CodeGenerator typeAndDimensions(ArrayDeclarationBuilder<T> alb) {
+        List<CodeGenerator> declarationWithDimensions = new ArrayList<>();
         declarationWithDimensions.add(alb.type());
         for (int i = 0; i < alb.dimensionCount(); i++) {
             if (i == 0) {
@@ -2734,7 +2734,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     public static class ArrayElementsBuilder<T> extends AbstractArrayElementsBuilder<T, ArrayElementsBuilder<T>> {
 
-        ArrayElementsBuilder(Function<BodyBuilder, T> converter, Object... initial) {
+        ArrayElementsBuilder(Function<CodeGenerator, T> converter, Object... initial) {
             super(converter, initial);
         }
 
@@ -2763,7 +2763,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     public static class ArrayElementsDereferenceBuilder<T> extends AbstractArrayElementsBuilder<T, ArrayElementsDereferenceBuilder<T>> {
 
-        ArrayElementsDereferenceBuilder(BodyBuilder of, Function<BodyBuilder, T> converter, Object... initial) {
+        ArrayElementsDereferenceBuilder(CodeGenerator of, Function<CodeGenerator, T> converter, Object... initial) {
             super(converter, initial);
             this.of = of;
         }
@@ -2774,13 +2774,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static abstract class AbstractArrayElementsBuilder<T, A extends AbstractArrayElementsBuilder<T, A>> extends BodyBuilderBase {
+    public static abstract class AbstractArrayElementsBuilder<T, A extends AbstractArrayElementsBuilder<T, A>> extends CodeGeneratorBase {
 
-        BodyBuilder of;
-        private final Function<BodyBuilder, T> converter;
-        private List<BodyBuilder> elements = new ArrayList<>();
+        CodeGenerator of;
+        private final Function<CodeGenerator, T> converter;
+        private List<CodeGenerator> elements = new ArrayList<>();
 
-        AbstractArrayElementsBuilder(Function<BodyBuilder, T> converter, Object... initial) {
+        AbstractArrayElementsBuilder(Function<CodeGenerator, T> converter, Object... initial) {
             this.converter = converter;
             for (Object s : initial) {
                 elements.add(new Adhoc(s.toString()));
@@ -2792,18 +2792,18 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             return (A) this;
         }
 
-        T of(BodyBuilder of) {
+        T of(CodeGenerator of) {
             this.of = of;
             return closeArrayElements();
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.wrappable(lb -> {
-                of.buildInto(lines);
-                for (BodyBuilder bb : elements) {
+                of.generateInto(lines);
+                for (CodeGenerator bb : elements) {
                     lb.squareBrackets(sq -> {
-                        bb.buildInto(sq);
+                        bb.generateInto(sq);
                     });
                 }
             });
@@ -2865,33 +2865,33 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    static final class Cast extends BodyBuilderBase {
+    static final class Cast extends CodeGeneratorBase {
 
-        private final BodyBuilder what;
+        private final CodeGenerator what;
 
         Cast(String what) {
             this(new Adhoc(what));
         }
 
-        Cast(BodyBuilder what) {
+        Cast(CodeGenerator what) {
             this.what = what;
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            lines.parens(what::buildInto);
+        public void generateInto(LinesBuilder lines) {
+            lines.parens(what::generateInto);
         }
     }
 
-    public static final class AssignmentBuilder<T> extends BodyBuilderBase {
+    public static final class AssignmentBuilder<T> extends CodeGeneratorBase {
 
         private final Function<AssignmentBuilder<T>, T> converter;
-        private BodyBuilder type;
-        private BodyBuilder assignment;
-        private final BodyBuilder varName;
-        private BodyBuilder cast;
+        private CodeGenerator type;
+        private CodeGenerator assignment;
+        private final CodeGenerator varName;
+        private CodeGenerator cast;
 
-        AssignmentBuilder(Function<AssignmentBuilder<T>, T> converter, BodyBuilder varName) {
+        AssignmentBuilder(Function<AssignmentBuilder<T>, T> converter, CodeGenerator varName) {
             this.converter = converter;
             this.varName = varName;
         }
@@ -3087,29 +3087,29 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.wrappable(lb -> {
                 if (type != null && !(this.assignment instanceof ArrayLiteralBuilder)) {
-                    type.buildInto(lb);
+                    type.generateInto(lb);
                 }
                 if (varName != null) {
-                    varName.buildInto(lb);
+                    varName.generateInto(lb);
                 }
                 lb.word("=").appendRaw(' ');
                 if (cast != null) {
-                    cast.buildInto(lb);
+                    cast.generateInto(lb);
                 }
-                assignment.buildInto(lb);
+                assignment.generateInto(lb);
             });
         }
     }
 
-    public static abstract class ArrayDeclarationBuilder<T> extends BodyBuilderBase {
+    public static abstract class ArrayDeclarationBuilder<T> extends CodeGeneratorBase {
 
         public abstract T closeArrayLiteral();
 
-        abstract BodyBuilder type();
+        abstract CodeGenerator type();
 
         abstract int dimensionCount();
     }
@@ -3117,17 +3117,17 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static final class ArrayDimensionsBuilder<T> extends ArrayDeclarationBuilder<T> {
 
         private final Function<ArrayDeclarationBuilder<T>, T> converter;
-        private final BodyBuilder type;
-        private List<BodyBuilder> dimensions = new ArrayList<>();
+        private final CodeGenerator type;
+        private List<CodeGenerator> dimensions = new ArrayList<>();
 
-        ArrayDimensionsBuilder(Function<ArrayDeclarationBuilder<T>, T> converter, BodyBuilder type, Object firstDimension) {
+        ArrayDimensionsBuilder(Function<ArrayDeclarationBuilder<T>, T> converter, CodeGenerator type, Object firstDimension) {
             this.converter = converter;
             this.type = type;
             dimensions.add(new Adhoc(firstDimension.toString()));
         }
 
         @Override
-        BodyBuilder type() {
+        CodeGenerator type() {
             return type;
         }
 
@@ -3171,21 +3171,21 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word("new");
-            type.buildInto(lines);
+            type.generateInto(lines);
             lines.backup();
-            for (BodyBuilder dim : dimensions) {
-                lines.squareBrackets(dim::buildInto);
+            for (CodeGenerator dim : dimensions) {
+                lines.squareBrackets(dim::generateInto);
             }
         }
     }
 
     public static final class ArrayLiteralBuilder<T> extends ArrayDeclarationBuilder<T> {
 
-        private final List<BodyBuilder> all = new LinkedList<>();
+        private final List<CodeGenerator> all = new LinkedList<>();
         private final Function<ArrayDeclarationBuilder<T>, T> converter;
-        private final BodyBuilder type;
+        private final CodeGenerator type;
 
         ArrayLiteralBuilder(Function<ArrayDeclarationBuilder<T>, T> converter, String type) {
             this.converter = converter;
@@ -3198,7 +3198,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        BodyBuilder type() {
+        CodeGenerator type() {
             return type;
         }
 
@@ -3333,16 +3333,16 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word("new");
-            type.buildInto(lines);
+            type.generateInto(lines);
             lines.backup();
             lines.appendRaw("[]");
             lines.word("{");
             lines.wrappable(lb -> {
-                for (Iterator<BodyBuilder> it = all.iterator(); it.hasNext();) {
-                    BodyBuilder bb = it.next();
-                    bb.buildInto(lb);
+                for (Iterator<CodeGenerator> it = all.iterator(); it.hasNext();) {
+                    CodeGenerator bb = it.next();
+                    bb.generateInto(lb);
                     if (it.hasNext()) {
                         lb.appendRaw(",");
                     }
@@ -3368,7 +3368,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         @Override
         public String toString() {
             LinesBuilder lb = new LinesBuilder(4);
-            buildInto(lb);
+            generateInto(lb);
             return lb.toString();
         }
 
@@ -3477,12 +3477,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static abstract class InvocationBuilderBase<T, B extends InvocationBuilderBase<T, B>> extends BodyBuilderBase implements ArgumentConsumer<B> {
+    public static abstract class InvocationBuilderBase<T, B extends InvocationBuilderBase<T, B>> extends CodeGeneratorBase implements ArgumentConsumer<B> {
 
         final Function<B, T> converter;
         String name;
-        BodyBuilder on;
-        List<BodyBuilder> arguments = new LinkedList<>();
+        CodeGenerator on;
+        List<CodeGenerator> arguments = new LinkedList<>();
         boolean isNew;
 
         InvocationBuilderBase(Function<B, T> converter, String name) {
@@ -3857,26 +3857,26 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.newlineIfNewStatement();
             lines.wrappable(lbb -> {
                 if (on != null) {
-                    on.buildInto(lbb);
+                    on.generateInto(lbb);
                     lbb.appendRaw(".");
                     lbb.appendRaw(name);
                 } else {
                     if (isNew) {
                         lbb.word("new");
-                        parseTypeName(name).buildInto(lines);
+                        parseTypeName(name).generateInto(lines);
                     } else {
                         lbb.word(name);
                     }
                 }
                 lbb.parens(lb -> {
                     lbb.hangingWrap(lb1 -> {
-                        for (Iterator<BodyBuilder> it = arguments.iterator(); it.hasNext();) {
-                            BodyBuilder arg = it.next();
-                            arg.buildInto(lb1);
+                        for (Iterator<CodeGenerator> it = arguments.iterator(); it.hasNext();) {
+                            CodeGenerator arg = it.next();
+                            arg.generateInto(lb1);
                             if (it.hasNext()) {
                                 lb1.appendRaw(',');
                             }
@@ -3887,12 +3887,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class SimpleLoopBuilder<T> implements BodyBuilder {
+    public static final class SimpleLoopBuilder<T> implements CodeGenerator {
 
         private final Function<SimpleLoopBuilder<T>, T> converter;
         private final String loopVar;
         private String type;
-        private BodyBuilder from;
+        private CodeGenerator from;
         private BlockBuilder body;
 
         SimpleLoopBuilder(Function<SimpleLoopBuilder<T>, T> converter, String loopType, String loopVar) {
@@ -4010,28 +4010,28 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.word("for ");
             lines.parens(lb -> {
                 lb.word(type);
                 lb.word(loopVar);
                 lb.word(":");
-                from.buildInto(lines);
+                from.generateInto(lines);
             });
-            body.buildInto(lines);
+            body.generateInto(lines);
         }
     }
 
-    public static final class ForVarBuilder<T> extends BodyBuilderBase {
+    public static final class ForVarBuilder<T> extends CodeGeneratorBase {
 
         private final Function<ForVarBuilder<T>, T> converter;
         private String loopVarType = "int";
-        private BodyBuilder initializedWith = new Adhoc("0");
+        private CodeGenerator initializedWith = new Adhoc("0");
         private boolean increment = true;
-        private BodyBuilder condition;
+        private CodeGenerator condition;
         private final String loopVar;
-        private BodyBuilder body;
+        private CodeGenerator body;
 
         ForVarBuilder(Function<ForVarBuilder<T>, T> converter, String loopVar) {
             this.converter = converter;
@@ -4099,14 +4099,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.word("for");
             lines.parens(lb -> {
                 lb.word(loopVarType).word(loopVar).word("=");
-                initializedWith.buildInto(lines);
+                initializedWith.generateInto(lines);
                 lb.appendRaw(";");
-                condition.buildInto(lines);
+                condition.generateInto(lines);
                 lb.appendRaw(";");
                 if (increment) {
                     lb.word(loopVar);
@@ -4116,18 +4116,18 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                     lb.appendRaw("--");
                 }
             });
-            body.buildInto(lines);
+            body.generateInto(lines);
         }
     }
 
     public static final class TryBuilder<T> extends BlockBuilderBase<T, TryBuilder<T>, T> {
 
         final List<CatchBuilder<?>> catches = new ArrayList<>();
-        private BodyBuilder finallyBlock;
+        private CodeGenerator finallyBlock;
         private boolean tryBuilt;
         private T buildResult;
 
-        public TryBuilder(Function<? super BodyBuilder, T> converter) {
+        public TryBuilder(Function<? super CodeGenerator, T> converter) {
             super(converter, true);
         }
 
@@ -4137,18 +4137,18 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.word("try ");
-            super.buildInto(lines);
+            super.generateInto(lines);
             for (CatchBuilder<?> cb : catches) {
                 lines.backup();
-                cb.buildInto(lines);
+                cb.generateInto(lines);
             }
             if (finallyBlock != null) {
                 lines.backup();
                 lines.word("finally ");
-                finallyBlock.buildInto(lines);
+                finallyBlock.generateInto(lines);
             }
         }
 
@@ -4183,7 +4183,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         public CatchBuilder<T> catching(String type, String... moreTypes) {
-            BodyBuilder ct = catchTypes(type, moreTypes);
+            CodeGenerator ct = catchTypes(type, moreTypes);
             CatchBuilder<T> result = new CatchBuilder<>(this, ct, cb -> {
                 catches.add(cb);
                 return endBlock();
@@ -4225,9 +4225,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         private static final String DEFAULT_EX_NAME = "thrown";
         private String exceptionName = DEFAULT_EX_NAME;
         private final TryBuilder<T> parent;
-        private final BodyBuilder types;
+        private final CodeGenerator types;
 
-        CatchBuilder(TryBuilder<T> parent, BodyBuilder types, Function<? super CatchBuilder<T>, T> convert) {
+        CatchBuilder(TryBuilder<T> parent, CodeGenerator types, Function<? super CatchBuilder<T>, T> convert) {
             super(convert, true);
             this.parent = parent;
             this.types = types;
@@ -4302,20 +4302,20 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word("catch ");
             lines.parens(lb -> {
                 lines.hangingWrap(lb1 -> {
-                    types.buildInto(lb1);
+                    types.generateInto(lb1);
                     lb1.word(exceptionName);
                 });
             });
-            super.buildInto(lines);
+            super.generateInto(lines);
         }
     }
 
-    private static BodyBuilder catchTypes(String type, String... more) {
-        List<BodyBuilder> all = new ArrayList<>();
+    private static CodeGenerator catchTypes(String type, String... more) {
+        List<CodeGenerator> all = new ArrayList<>();
         all.add(parseTypeName(notNull("type", type)));
         if (more.length > 0) {
             for (int i = 0; i < more.length; i++) {
@@ -4323,12 +4323,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 all.add(new Adhoc(notNull("more[" + i + "]", more[i])));
             }
         }
-        BodyBuilder types = (new Composite(all.toArray(new BodyBuilder[all.size()])));
+        CodeGenerator types = (new Composite(all.toArray(new CodeGenerator[all.size()])));
         return types;
 
     }
 
-    private static final class SynchronizedBlockBuilder<T> implements BodyBuilder {
+    private static final class SynchronizedBlockBuilder<T> implements CodeGenerator {
 
         private final Function<SynchronizedBlockBuilder<T>, T> converter;
         private BlockBuilder<?> body;
@@ -4347,25 +4347,25 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.word("synchronized");
             lines.parens(lb -> {
                 lb.word(on);
             });
-            body.buildInto(lines);
+            body.generateInto(lines);
         }
     }
 
-    static final BodyBuilder EMPTY = (LinesBuilder lines) -> {
+    static final CodeGenerator EMPTY = (LinesBuilder lines) -> {
         // do nothing
     };
 
-    public static final class LambdaBuilder<T> implements BodyBuilder {
+    public static final class LambdaBuilder<T> implements CodeGenerator {
 
         private final Function<LambdaBuilder<T>, T> converter;
         private BlockBuilder<?> body;
-        private final LinkedHashMap<String, BodyBuilder> arguments = new LinkedHashMap<>();
+        private final LinkedHashMap<String, CodeGenerator> arguments = new LinkedHashMap<>();
         private Exception creation;
 
         LambdaBuilder(Function<LambdaBuilder<T>, T> converter) {
@@ -4393,7 +4393,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 this.body = bb;
 
                 LinesBuilder lb = new LinesBuilder();
-                bb.buildInto(lb);
+                bb.generateInto(lb);
                 h.set(converter.apply(this));
                 return null;
             }, true);
@@ -4417,7 +4417,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (body == null) {
                 throw new IllegalStateException("Body null", creation);
             }
@@ -4428,9 +4428,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             } else {
                 lines.parens(lb -> {
                     int argCount = 0;
-                    for (Iterator<Map.Entry<String, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                        Map.Entry<String, BodyBuilder> e = it.next();
-                        BodyBuilder type = e.getValue();
+                    for (Iterator<Map.Entry<String, CodeGenerator>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                        Map.Entry<String, CodeGenerator> e = it.next();
+                        CodeGenerator type = e.getValue();
                         String name = e.getKey();
                         int ac = type == EMPTY ? 1 : 2;
                         if (argCount != 0 && argCount != ac) {
@@ -4442,7 +4442,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                         if (ac == 1) {
                             lb.word(name);
                         } else {
-                            type.buildInto(lb);
+                            type.generateInto(lb);
                             lb.word(name);
                         }
                         if (it.hasNext()) {
@@ -4452,22 +4452,22 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 });
             }
             lines.word("->");
-            body.buildInto(lines);
+            body.generateInto(lines);
             lines.backup();
         }
     }
 
-    interface Operator extends BodyBuilder {
+    interface Operator extends CodeGenerator {
 
         boolean applicableTo(Number num);
     }
 
-    public static class StringConcatenationBuilder<T> implements BodyBuilder {
+    public static class StringConcatenationBuilder<T> implements CodeGenerator {
 
-        private BodyBuilder leftSide;
+        private CodeGenerator leftSide;
         private final Function<? super StringConcatenationBuilder<T>, T> converter;
 
-        StringConcatenationBuilder(BodyBuilder leftSide, Function<? super StringConcatenationBuilder<T>, T> converter) {
+        StringConcatenationBuilder(CodeGenerator leftSide, Function<? super StringConcatenationBuilder<T>, T> converter) {
             this.leftSide = leftSide;
             this.converter = converter;
         }
@@ -4482,7 +4482,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 leftSide = val;
                 return this;
             }
-            BodyBuilder newLeftSide = new Composite(leftSide, Operators.PLUS, val);
+            CodeGenerator newLeftSide = new Composite(leftSide, Operators.PLUS, val);
             leftSide = newLeftSide;
             return this;
         }
@@ -4493,7 +4493,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                     leftSide = veb;
                     return this;
                 }
-                BodyBuilder newLeftSide = new Composite(leftSide, Operators.PLUS, veb);
+                CodeGenerator newLeftSide = new Composite(leftSide, Operators.PLUS, veb);
                 leftSide = newLeftSide;
                 return this;
             });
@@ -4507,7 +4507,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                     leftSide = veb;
                     return null;
                 }
-                BodyBuilder newLeftSide = new Composite(leftSide, Operators.PLUS, veb);
+                CodeGenerator newLeftSide = new Composite(leftSide, Operators.PLUS, veb);
                 leftSide = newLeftSide;
                 return null;
             });
@@ -4592,12 +4592,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            leftSide.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            leftSide.generateInto(lines);
         }
     }
 
-    public enum NumericCast implements BodyBuilder {
+    public enum NumericCast implements CodeGenerator {
         INTEGER("int"),
         SHORT("short"),
         BYTE("byte"),
@@ -4616,7 +4616,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.parens(lb -> {
                 lb.appendRaw(stringValue + " ");
             });
@@ -4632,17 +4632,17 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      */
     public static abstract class NumericExpressionBuilderBase<T, N extends NumericExpressionBuilderBase<T, N, F>, F> {
 
-        final BodyBuilder leftSide;
+        final CodeGenerator leftSide;
         final Function<F, T> converter;
         boolean parenthesized;
         NumericCast castTo;
 
-        NumericExpressionBuilderBase(BodyBuilder leftSide, Function<F, T> converter) {
+        NumericExpressionBuilderBase(CodeGenerator leftSide, Function<F, T> converter) {
             this.leftSide = leftSide;
             this.converter = converter;
         }
 
-        abstract F newFinishable(BodyBuilder rightSide, Operator op);
+        abstract F newFinishable(CodeGenerator rightSide, Operator op);
 
         @SuppressWarnings("unchecked")
         private N cast() {
@@ -4956,7 +4956,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      */
     public static abstract class NumericOrBitwiseExpressionBuilderBase<T, N extends NumericOrBitwiseExpressionBuilderBase<T, N, F>, F> extends NumericExpressionBuilderBase<T, N, F> {
 
-        NumericOrBitwiseExpressionBuilderBase(BodyBuilder leftSide, Function<F, T> converter) {
+        NumericOrBitwiseExpressionBuilderBase(CodeGenerator leftSide, Function<F, T> converter) {
             super(leftSide, converter);
         }
 
@@ -5285,7 +5285,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
         Consumer<FinishableNumericExpressionBuilder<T>> notifying;
 
-        NumericExpressionBuilder(BodyBuilder leftSide, Function<FinishableNumericExpressionBuilder<T>, T> converter) {
+        NumericExpressionBuilder(CodeGenerator leftSide, Function<FinishableNumericExpressionBuilder<T>, T> converter) {
             super(leftSide, converter);
         }
 
@@ -5299,7 +5299,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        FinishableNumericExpressionBuilder<T> newFinishable(BodyBuilder rightSide, Operator op) {
+        FinishableNumericExpressionBuilder<T> newFinishable(CodeGenerator rightSide, Operator op) {
             FinishableNumericExpressionBuilder<T> result = new FinishableNumericExpressionBuilder<>(rightSide, leftSide, op, parenthesized, converter);
             if (castTo != null) {
                 result.castTo = castTo;
@@ -5323,7 +5323,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
         Consumer<FinishableNumericOrBitwiseExpressionBuilder<T>> notifying;
 
-        NumericOrBitwiseExpressionBuilder(BodyBuilder leftSide, Function<FinishableNumericOrBitwiseExpressionBuilder<T>, T> converter) {
+        NumericOrBitwiseExpressionBuilder(CodeGenerator leftSide, Function<FinishableNumericOrBitwiseExpressionBuilder<T>, T> converter) {
             super(leftSide, converter);
         }
 
@@ -5337,7 +5337,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        FinishableNumericOrBitwiseExpressionBuilder<T> newFinishable(BodyBuilder rightSide, Operator op) {
+        FinishableNumericOrBitwiseExpressionBuilder<T> newFinishable(CodeGenerator rightSide, Operator op) {
             FinishableNumericOrBitwiseExpressionBuilder<T> result = new FinishableNumericOrBitwiseExpressionBuilder<>(rightSide, leftSide, op, parenthesized, converter);
             if (notifying != null) {
                 notifying.accept(result);
@@ -5352,12 +5352,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      *
      * @param <T> The type
      */
-    public static final class FinishableNumericExpressionBuilder<T> extends NumericExpressionBuilderBase<T, FinishableNumericExpressionBuilder<T>, FinishableNumericExpressionBuilder<T>> implements BodyBuilder {
+    public static final class FinishableNumericExpressionBuilder<T> extends NumericExpressionBuilderBase<T, FinishableNumericExpressionBuilder<T>, FinishableNumericExpressionBuilder<T>> implements CodeGenerator {
 
-        private final BodyBuilder rightSide;
+        private final CodeGenerator rightSide;
         private final Operator op;
 
-        FinishableNumericExpressionBuilder(BodyBuilder rightSide, BodyBuilder leftSide, Operator op, boolean parenthesized, Function<FinishableNumericExpressionBuilder<T>, T> converter) {
+        FinishableNumericExpressionBuilder(CodeGenerator rightSide, CodeGenerator leftSide, Operator op, boolean parenthesized, Function<FinishableNumericExpressionBuilder<T>, T> converter) {
             super(leftSide, converter);
             this.rightSide = rightSide;
             this.op = op;
@@ -5365,7 +5365,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        FinishableNumericExpressionBuilder<T> newFinishable(BodyBuilder rightSide, Operator op) {
+        FinishableNumericExpressionBuilder<T> newFinishable(CodeGenerator rightSide, Operator op) {
             return new FinishableNumericExpressionBuilder<>(rightSide, this, op, false, converter);
         }
 
@@ -5374,7 +5374,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (parenthesized) {
                 lines.parens(this::reallyBuildInto);
             } else {
@@ -5384,20 +5384,20 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
         private void reallyBuildInto(LinesBuilder lines) {
             if (castTo != null) {
-                castTo.buildInto(lines);
+                castTo.generateInto(lines);
             }
-            leftSide.buildInto(lines);
-            op.buildInto(lines);
-            rightSide.buildInto(lines);
+            leftSide.generateInto(lines);
+            op.generateInto(lines);
+            rightSide.generateInto(lines);
         }
     }
 
-    public static final class FinishableNumericOrBitwiseExpressionBuilder<T> extends NumericOrBitwiseExpressionBuilderBase<T, FinishableNumericOrBitwiseExpressionBuilder<T>, FinishableNumericOrBitwiseExpressionBuilder<T>> implements BodyBuilder {
+    public static final class FinishableNumericOrBitwiseExpressionBuilder<T> extends NumericOrBitwiseExpressionBuilderBase<T, FinishableNumericOrBitwiseExpressionBuilder<T>, FinishableNumericOrBitwiseExpressionBuilder<T>> implements CodeGenerator {
 
-        private final BodyBuilder rightSide;
+        private final CodeGenerator rightSide;
         private final Operator op;
 
-        FinishableNumericOrBitwiseExpressionBuilder(BodyBuilder rightSide, BodyBuilder leftSide, Operator op, boolean parenthesized, Function<FinishableNumericOrBitwiseExpressionBuilder<T>, T> converter) {
+        FinishableNumericOrBitwiseExpressionBuilder(CodeGenerator rightSide, CodeGenerator leftSide, Operator op, boolean parenthesized, Function<FinishableNumericOrBitwiseExpressionBuilder<T>, T> converter) {
             super(leftSide, converter);
             this.rightSide = rightSide;
             this.op = op;
@@ -5405,7 +5405,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        FinishableNumericOrBitwiseExpressionBuilder<T> newFinishable(BodyBuilder rightSide, Operator op) {
+        FinishableNumericOrBitwiseExpressionBuilder<T> newFinishable(CodeGenerator rightSide, Operator op) {
             return new FinishableNumericOrBitwiseExpressionBuilder<>(rightSide, this, op, false, converter);
         }
 
@@ -5414,7 +5414,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (parenthesized) {
                 lines.parens(this::reallyBuildInto);
             } else {
@@ -5424,13 +5424,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
         private void reallyBuildInto(LinesBuilder lines) {
             if (op == COMPLEMENT) {
-                op.buildInto(lines);
-                leftSide.buildInto(lines);
+                op.generateInto(lines);
+                leftSide.generateInto(lines);
                 assert EMPTY == rightSide;
             } else {
-                leftSide.buildInto(lines);
-                op.buildInto(lines);
-                rightSide.buildInto(lines);
+                leftSide.generateInto(lines);
+                op.generateInto(lines);
+                rightSide.generateInto(lines);
             }
         }
     }
@@ -5443,9 +5443,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      *
      * @param <T> The type under construction
      */
-    public static class ValueExpressionBuilder<T> implements BodyBuilder {
+    public static class ValueExpressionBuilder<T> implements CodeGenerator {
 
-        private BodyBuilder value;
+        private CodeGenerator value;
         private final Function<ValueExpressionBuilder<T>, T> converter;
         private boolean parenthesized;
         private boolean newline;
@@ -5618,7 +5618,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         public ValueExpressionBuilder<T> castTo(String type) {
-            BodyBuilder typeBody = parseTypeName(type);
+            CodeGenerator typeBody = parseTypeName(type);
             cast = new Composite(new Punctuation('('), typeBody, new Punctuation(')'));
             return this;
         }
@@ -5662,7 +5662,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         public StringConcatenationBuilder<T> concatenate(String stringLiteral) {
-            BodyBuilder base = new Adhoc(LinesBuilder.stringLiteral(stringLiteral));
+            CodeGenerator base = new Adhoc(LinesBuilder.stringLiteral(stringLiteral));
             return new StringConcatenationBuilder<>(base, scb -> {
                 value = scb;
                 return converter.apply(this);
@@ -5900,7 +5900,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (value == null) {
                 throw new IllegalStateException("No value", creation);
             }
@@ -5909,27 +5909,27 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             }
             if (parenthesized) {
                 if (cast != null) {
-                    cast.buildInto(lines);
+                    cast.generateInto(lines);
                 }
-                lines.parens(value::buildInto);
+                lines.parens(value::generateInto);
             } else {
                 if (cast != null) {
-                    cast.buildInto(lines);
+                    cast.generateInto(lines);
                 }
-                value.buildInto(lines);
+                value.generateInto(lines);
             }
         }
     }
 
-    static class TernaryBuilder<T> implements BodyBuilder {
+    static class TernaryBuilder<T> implements CodeGenerator {
 
         private final Function<TernaryBuilder<T>, T> converter;
 
-        private final BodyBuilder condition;
-        private BodyBuilder trueSide;
-        private BodyBuilder falseSide;
+        private final CodeGenerator condition;
+        private CodeGenerator trueSide;
+        private CodeGenerator falseSide;
 
-        TernaryBuilder(Function<TernaryBuilder<T>, T> converter, BodyBuilder condition) {
+        TernaryBuilder(Function<TernaryBuilder<T>, T> converter, CodeGenerator condition) {
             this.converter = converter;
             this.condition = condition;
         }
@@ -5947,16 +5947,16 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lb) {
+        public void generateInto(LinesBuilder lb) {
 //            lines.wrappable(lb -> {
-            condition.buildInto(lb);
+            condition.generateInto(lb);
             lb.indent(lbb -> {
                 lb.onNewLine();
                 lbb.word("?");
-                trueSide.buildInto(lbb);
+                trueSide.generateInto(lbb);
                 lbb.onNewLine();
                 lbb.word(":");
-                falseSide.buildInto(lbb);
+                falseSide.generateInto(lbb);
             });
 //            });
         }
@@ -5982,7 +5982,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static class WhileBuilder<T> extends BlockBuilderBase<T, WhileBuilder<T>, WhileBuilder<T>> {
 
         private final boolean tailCondition;
-        private BodyBuilder condition;
+        private CodeGenerator condition;
 
         WhileBuilder(boolean tail, Function<? super BlockBuilderBase<T, WhileBuilder<T>, WhileBuilder<T>>, T> converter) {
             super(converter, true);
@@ -6027,17 +6027,17 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (tailCondition) {
                 lines.onNewLine().word("do");
-                super.buildInto(lines);
+                super.generateInto(lines);
                 lines.word("while");
-                lines.parens(condition::buildInto);
+                lines.parens(condition::generateInto);
                 lines.onNewLine();
             } else {
                 lines.onNewLine().word("while");
-                lines.parens(condition::buildInto);
-                super.buildInto(lines);
+                lines.parens(condition::generateInto);
+                super.generateInto(lines);
                 lines.onNewLine();
             }
         }
@@ -6098,12 +6098,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      * should close the builder, where which that does not make sense for all
      * subtypes.
      */
-    public static abstract class BlockBuilderBase<T, B extends BlockBuilderBase<T, B, X>, X> extends BodyBuilderBase {
+    public static abstract class BlockBuilderBase<T, B extends BlockBuilderBase<T, B, X>, X> extends CodeGeneratorBase {
 
-        final List<BodyBuilder> statements = new LinkedList<>();
+        final List<CodeGenerator> statements = new LinkedList<>();
         final Function<? super B, T> converter;
         private final boolean openBlock;
-        private BiConsumer<? super B, ? super BodyBuilder> probe;
+        private BiConsumer<? super B, ? super CodeGenerator> probe;
 
         BlockBuilderBase(Function<? super B, T> converter, boolean openBlock) {
             this.converter = converter;
@@ -6131,13 +6131,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             }
         }
 
-        B probeAdditionsWith(BiConsumer<? super B, ? super BodyBuilder> c) {
+        B probeAdditionsWith(BiConsumer<? super B, ? super CodeGenerator> c) {
             // for debugging duplicate adds
             this.probe = c;
             return cast();
         }
 
-        void addStatement(BodyBuilder bb) {
+        void addStatement(CodeGenerator bb) {
             statements.add(bb);
             if (probe != null) {
                 probe.accept(cast(), bb);
@@ -6451,11 +6451,11 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             }, level);
         }
 
-        public static final class LogLineBuilder<T> implements BodyBuilder {
+        public static final class LogLineBuilder<T> implements CodeGenerator {
 
             private final Function<LogLineBuilder<T>, T> converter;
             private String line;
-            private List<BodyBuilder> arguments = new ArrayList<>(5);
+            private List<CodeGenerator> arguments = new ArrayList<>(5);
             private final Level level;
 
             public LogLineBuilder(Function<LogLineBuilder<T>, T> converter, Level level) {
@@ -6507,7 +6507,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             }
 
             @Override
-            public void buildInto(LinesBuilder lines) {
+            public void generateInto(LinesBuilder lines) {
                 lines.statement(sb -> {
                     sb.word("LOGGER.log");
                     sb.delimit('(', ')', llb -> {
@@ -6518,14 +6518,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                                 break;
                             case 1:
                                 llb.appendRaw(",");
-                                arguments.get(0).buildInto(llb);
+                                arguments.get(0).generateInto(llb);
                                 break;
                             default:
                                 llb.appendRaw(",");
                                 llb.word("new").word("Object[]");
                                 llb.delimit('{', '}', db -> {
-                                    for (Iterator<BodyBuilder> it = arguments.iterator(); it.hasNext();) {
-                                        it.next().buildInto(db);
+                                    for (Iterator<CodeGenerator> it = arguments.iterator(); it.hasNext();) {
+                                        it.next().generateInto(db);
                                         if (it.hasNext()) {
                                             db.appendRaw(",");
                                         }
@@ -6673,13 +6673,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 into.onNewLine();
                 return;
             }
-            for (BodyBuilder bb : statements) {
-                bb.buildInto(into);
+            for (CodeGenerator bb : statements) {
+                bb.generateInto(into);
             }
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (openBlock) {
                 lines.block(lb -> {
                     writeStatements(lb);
@@ -7216,7 +7216,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             return converter.apply(cast());
         }
 
-        static class OneStatement extends BodyBuilderBase {
+        static class OneStatement extends CodeGeneratorBase {
 
             private final String text;
             private final boolean initialNewline;
@@ -7231,7 +7231,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             }
 
             @Override
-            public void buildInto(LinesBuilder lines) {
+            public void generateInto(LinesBuilder lines) {
                 if (text.indexOf('\n') > 0) {
                     if (initialNewline) {
                         lines.maybeNewline();
@@ -7273,7 +7273,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class LineComment extends BodyBuilderBase {
+    public static final class LineComment extends CodeGeneratorBase {
 
         private final String line;
         private final boolean trailing;
@@ -7284,21 +7284,21 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.lineComment(trailing, line);
         }
     }
 
-    public static final class AssertionBuilder<T> extends BodyBuilderBase {
+    public static final class AssertionBuilder<T> extends CodeGeneratorBase {
 
-        private BodyBuilder assertThat;
-        private BodyBuilder message;
+        private CodeGenerator assertThat;
+        private CodeGenerator message;
         private final Function<AssertionBuilder<T>, T> converter;
         private boolean built;
         private Exception builtAt;
         private final boolean forLambda;
 
-        AssertionBuilder(BodyBuilder leftSide, Function<AssertionBuilder<T>, T> converter) {
+        AssertionBuilder(CodeGenerator leftSide, Function<AssertionBuilder<T>, T> converter) {
             assertThat = leftSide;
             this.converter = converter;
             forLambda = true;
@@ -7374,26 +7374,26 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (assertThat == null) {
                 throw new IllegalStateException("AssertionBuilder not completed - "
                         + "no clause for what to assert provided");
             }
             lines.statement(lb -> {
                 lb.onNewLine().word("assert");
-                assertThat.buildInto(lb);
+                assertThat.generateInto(lb);
                 if (message != null) {
                     lines.word(":", true);
-                    message.buildInto(lb);
+                    message.generateInto(lb);
 
                 }
             });
         }
     }
 
-    public static final class TypeAssignment<T> extends BodyBuilderBase {
+    public static final class TypeAssignment<T> extends CodeGeneratorBase {
 
-        private BodyBuilder type;
+        private CodeGenerator type;
         private final Function<TypeAssignment<T>, T> converter;
 
         public TypeAssignment(Function<TypeAssignment<T>, T> converter) {
@@ -7418,17 +7418,17 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            type.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            type.generateInto(lines);
         }
     }
 
-    public static final class DeclarationBuilder<T> extends BodyBuilderBase {
+    public static final class DeclarationBuilder<T> extends CodeGeneratorBase {
 
         private final Function<DeclarationBuilder<T>, T> converter;
         private final String name;
-        private BodyBuilder as;
-        private BodyBuilder initializer;
+        private CodeGenerator as;
+        private CodeGenerator initializer;
 
         DeclarationBuilder(Function<DeclarationBuilder<T>, T> converter, String name) {
             this.converter = converter;
@@ -7438,7 +7438,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         public T as(String type) {
             this.as = parseTypeName(checkIdentifier(notNull("type", type)));
             LinesBuilder lb = new LinesBuilder();
-            as.buildInto(lb);
+            as.generateInto(lb);
             return converter.apply(this);
         }
 
@@ -7586,14 +7586,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.statement(l -> {
-                as.buildInto(lines);
+                as.generateInto(lines);
                 l.word(name);
                 if (initializer != null) {
                     l.word("=");
-                    initializer.buildInto(l);
+                    initializer.generateInto(l);
                 }
             });
         }
@@ -7638,20 +7638,20 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     public static final class IfBuilder<T> extends BlockBuilderBase<T, IfBuilder<T>, IfBuilder<T>> {
 
         private BlockBuilderBase<?, ?, ?> finalElse;
-        private final List<Pair<BodyBuilder, IfBuilder<?>>> clausePairs = new ArrayList<>();
+        private final List<Pair<CodeGenerator, IfBuilder<?>>> clausePairs = new ArrayList<>();
 
-        IfBuilder(Function<? super IfBuilder<T>, T> converter, BodyBuilder condition) {
+        IfBuilder(Function<? super IfBuilder<T>, T> converter, CodeGenerator condition) {
             super(converter, true);
             clausePairs.add(new Pair<>(condition, this));
         }
 
-        IfBuilder(IfBuilder<T> orig, BodyBuilder condition) {
+        IfBuilder(IfBuilder<T> orig, CodeGenerator condition) {
             super(orig.converter, true);
             clausePairs.addAll(orig.clausePairs);
             clausePairs.add(new Pair<>(condition, this));
         }
 
-        IfBuilder(IfBuilder<?> orig, Function<? super IfBuilder<T>, T> converter, BodyBuilder condition) {
+        IfBuilder(IfBuilder<?> orig, Function<? super IfBuilder<T>, T> converter, CodeGenerator condition) {
             super(converter, true);
             clausePairs.addAll(orig.clausePairs);
             clausePairs.add(new Pair<>(condition, this));
@@ -7717,21 +7717,21 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         private void writeBlockInto(LinesBuilder lines) {
-            super.buildInto(lines);
+            super.generateInto(lines);
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.backup().onNewLine(); // XXX
             assert !clausePairs.isEmpty();
             for (int i = 0; i < clausePairs.size(); i++) {
-                Pair<BodyBuilder, IfBuilder<?>> pair = clausePairs.get(i);
+                Pair<CodeGenerator, IfBuilder<?>> pair = clausePairs.get(i);
                 if (i == 0) {
                     lines.onNewLine();
                     lines.word("if ");
                 }
                 lines.parens(lb -> {
-                    pair.a.buildInto(lb);
+                    pair.a.generateInto(lb);
                 });
                 lines.backup();
                 pair.b.writeBlockInto(lines);
@@ -7742,15 +7742,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             if (finalElse != null) {
                 lines.backup();
                 lines.word("else");
-                finalElse.buildInto(lines);
+                finalElse.generateInto(lines);
             }
         }
     }
 
-    static final class Empty implements BodyBuilder {
+    static final class Empty implements CodeGenerator {
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             // do nothing
         }
 
@@ -7765,14 +7765,14 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static class ParenthesizedCondition<T> extends BodyBuilderBase {
+    public static class ParenthesizedCondition<T> extends CodeGeneratorBase {
 
         private boolean negated;
         private final BiFunction<ParenthesizedCondition<T>, LogicalOperation, T> converter;
-        private final BodyBuilder inner;
+        private final CodeGenerator inner;
 
         ParenthesizedCondition(BiFunction<ParenthesizedCondition<T>, LogicalOperation, T> converter,
-                BodyBuilder inner) {
+                CodeGenerator inner) {
             this.converter = converter;
             this.inner = inner;
         }
@@ -7787,30 +7787,30 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (negated) {
                 lines.appendRaw('!');
             }
             lines.parens(lb -> {
-                inner.buildInto(lines);
+                inner.generateInto(lines);
             });
         }
     }
 
-    public static final class ConditionBuilder<T> extends BodyBuilderBase {
+    public static final class ConditionBuilder<T> extends CodeGeneratorBase {
 
-        private final Function<BodyBuilder, T> converter;
+        private final Function<CodeGenerator, T> converter;
         private boolean negated;
         private boolean parenthesized;
-        private BodyBuilder prev;
+        private CodeGenerator prev;
         private LogicalOperation op;
-        private BodyBuilder clause;
+        private CodeGenerator clause;
 
-        ConditionBuilder(Function<BodyBuilder, T> converter) {
+        ConditionBuilder(Function<CodeGenerator, T> converter) {
             this.converter = converter;
         }
 
-        ConditionBuilder(Function<BodyBuilder, T> converter, BodyBuilder prev, LogicalOperation op) {
+        ConditionBuilder(Function<CodeGenerator, T> converter, CodeGenerator prev, LogicalOperation op) {
             this.converter = converter;
             this.prev = prev;
             this.op = op;
@@ -7837,13 +7837,13 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 lines.appendRaw('(');
             }
             if (prev != null) {
-                prev.buildInto(lines);
+                prev.generateInto(lines);
             }
             if (op != null) {
-                op.buildInto(lines);
+                op.generateInto(lines);
             }
             if (clause != null) {
-                clause.buildInto(lines);
+                clause.generateInto(lines);
             }
             if (parenthesized) {
                 lines.appendRaw(')');
@@ -7885,7 +7885,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             return numericCondition(friendlyNumber(initialLiteral), c);
         }
 
-        private NumericOrBitwiseExpressionBuilder<ComparisonBuilder<T>> numericCondition(BodyBuilder initialExpression) {
+        private NumericOrBitwiseExpressionBuilder<ComparisonBuilder<T>> numericCondition(CodeGenerator initialExpression) {
             return new NumericOrBitwiseExpressionBuilder<ComparisonBuilder<T>>(initialExpression,
                     num -> {
                         clause = num;
@@ -7893,7 +7893,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                     });
         }
 
-        private ComparisonBuilder<T> numericCondition(BodyBuilder initialExpression,
+        private ComparisonBuilder<T> numericCondition(CodeGenerator initialExpression,
                 Consumer<NumericOrBitwiseExpressionBuilder<?>> c) {
             Holder<FinishableNumericOrBitwiseExpressionBuilder<ComparisonBuilder<Void>>> fin = new Holder<>();
             Holder<ComparisonBuilder<T>> hd = new Holder<>();
@@ -7996,7 +7996,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         private static final ThreadLocal<Boolean> BUILDING_CONDITION = ThreadLocal.withInitial(() -> false);
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             boolean entry = !BUILDING_CONDITION.get();
             if (entry) {
                 BUILDING_CONDITION.set(true);
@@ -8032,21 +8032,21 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
         private void doBuildInto(LinesBuilder lines) {
             if (prev != null) {
-                prev.buildInto(lines);
+                prev.generateInto(lines);
                 int remainingLength = clause.toString().length()
                         + (op == null ? 0 : op.toString().length() + 1);
                 lines.hintLineBreak(remainingLength);
                 if (op != null) {
-                    op.buildInto(lines);
+                    op.generateInto(lines);
                 } else {
                     lines.word("==");
                 }
             }
-            clause.buildInto(lines);
+            clause.generateInto(lines);
         }
     }
 
-    public static final class ComparisonBuilder<T> extends BodyBuilderBase {
+    public static final class ComparisonBuilder<T> extends CodeGeneratorBase {
 
         private final ConditionBuilder<T> leftSide;
         private Consumer<T> notify;
@@ -8064,7 +8064,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             return this;
         }
 
-        private Function<BodyBuilder, T> converter() {
+        private Function<CodeGenerator, T> converter() {
             if (notify == null) {
                 return leftSide.converter;
             } else {
@@ -8514,19 +8514,19 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            leftSide.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            leftSide.generateInto(lines);
         }
     }
 
-    public static final class ConditionRightSideBuilder<T> extends BodyBuilderBase {
+    public static final class ConditionRightSideBuilder<T> extends CodeGeneratorBase {
 
-        private final Function<BodyBuilder, T> converter;
+        private final Function<CodeGenerator, T> converter;
         boolean negated;
-        final BodyBuilder leftSide;
+        final CodeGenerator leftSide;
         final ComparisonOperation op;
 
-        ConditionRightSideBuilder(Function<BodyBuilder, T> converter, BodyBuilder leftSide, ComparisonOperation op) {
+        ConditionRightSideBuilder(Function<CodeGenerator, T> converter, CodeGenerator leftSide, ComparisonOperation op) {
             this.converter = converter;
             this.leftSide = leftSide;
             if (leftSide instanceof ConditionBuilder<?>) {
@@ -8613,7 +8613,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (negated) {
                 lines.word("!");
                 lines.parens(this::doBuildInto);
@@ -8623,9 +8623,9 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         private void doBuildInto(LinesBuilder lines) {
-            leftSide.buildInto(lines);
+            leftSide.generateInto(lines);
             if (op != null) {
-                op.buildInto(lines);
+                op.generateInto(lines);
                 lines.appendRaw(' ');
             }
         }
@@ -8665,32 +8665,32 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    static final class NegatedWrapper implements BodyBuilder {
+    static final class NegatedWrapper implements CodeGenerator {
 
-        private final BodyBuilder bb;
+        private final CodeGenerator bb;
 
-        NegatedWrapper(BodyBuilder bb) {
+        NegatedWrapper(CodeGenerator bb) {
             this.bb = bb;
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.appendRaw('!');
             if (bb instanceof InvocationBuilder<?> || bb instanceof ValueExpressionBuilder<?> || bb instanceof AssignmentBuilder<?>) {
-                bb.buildInto(lines);
+                bb.generateInto(lines);
             } else {
-                lines.parens(bb::buildInto);
+                lines.parens(bb::generateInto);
             }
         }
     }
 
-    public static final class FinishableConditionBuilder<T> extends BodyBuilderBase {
+    public static final class FinishableConditionBuilder<T> extends CodeGeneratorBase {
 
-        private final Function<BodyBuilder, T> converter;
+        private final Function<CodeGenerator, T> converter;
         final ConditionRightSideBuilder<?> leftSideAndOp;
-        private final BodyBuilder rightSide;
+        private final CodeGenerator rightSide;
 
-        FinishableConditionBuilder(Function<BodyBuilder, T> converter, ConditionRightSideBuilder<?> leftSideAndOp, BodyBuilder rightSide) {
+        FinishableConditionBuilder(Function<CodeGenerator, T> converter, ConditionRightSideBuilder<?> leftSideAndOp, CodeGenerator rightSide) {
             this.converter = converter;
             this.leftSideAndOp = leftSideAndOp;
             this.rightSide = rightSide;
@@ -8726,15 +8726,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            leftSideAndOp.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            leftSideAndOp.generateInto(lines);
             if (rightSide != null) {
-                rightSide.buildInto(lines);
+                rightSide.generateInto(lines);
             }
         }
     }
 
-    private static enum UnaryOperator implements BodyBuilder {
+    private static enum UnaryOperator implements CodeGenerator {
         POSITIVE("+"),
         NEGATIVE("-"),
         INCREMENT("++"),
@@ -8747,7 +8747,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word(s);
         }
 
@@ -8758,7 +8758,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     }
 
-    private static enum ArithmenticOperator implements BodyBuilder {
+    private static enum ArithmenticOperator implements CodeGenerator {
         PLUS("+"),
         MINUS("-"),
         TIMES("*"),
@@ -8771,7 +8771,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word(s);
         }
 
@@ -8781,7 +8781,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    private static enum AssignmentOperator implements BodyBuilder {
+    private static enum AssignmentOperator implements CodeGenerator {
         EQUALS("="),
         PLUS_EQUALS("+="),
         MINUS_EQUALS("-="),
@@ -8799,7 +8799,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word(s);
         }
 
@@ -8809,7 +8809,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    private static enum ComparisonOperation implements BodyBuilder {
+    private static enum ComparisonOperation implements CodeGenerator {
         EQ("=="),
         GT(">"),
         LT("<"),
@@ -8859,18 +8859,18 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word(s);
         }
     }
 
-    private static enum LogicalOperation implements BodyBuilder {
+    private static enum LogicalOperation implements CodeGenerator {
         OR,
         AND,
         XOR;
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             switch (this) {
                 case OR:
                     lines.word("||");
@@ -8887,11 +8887,11 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class SwitchBuilder<T> extends BodyBuilderBase {
+    public static final class SwitchBuilder<T> extends CodeGeneratorBase {
 
         private final Function<SwitchBuilder<T>, T> converter;
-        private final Map<Object, BodyBuilder> cases = new LinkedHashMap<>();
-        private final BodyBuilder what;
+        private final Map<Object, CodeGenerator> cases = new LinkedHashMap<>();
+        private final CodeGenerator what;
         private final Set<String> allCases = new HashSet<>();
 
         SwitchBuilder(Function<SwitchBuilder<T>, T> converter, String on) {
@@ -8899,7 +8899,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
             this.what = new Adhoc(on);
         }
 
-        SwitchBuilder(Function<SwitchBuilder<T>, T> converter, BodyBuilder on) {
+        SwitchBuilder(Function<SwitchBuilder<T>, T> converter, CodeGenerator on) {
             this.converter = converter;
             this.what = on;
         }
@@ -9023,24 +9023,24 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine()
                     .word("switch")
-                    .parens(what::buildInto);
+                    .parens(what::generateInto);
             lines.block(lb -> {
-                for (Map.Entry<Object, BodyBuilder> e : cases.entrySet()) {
+                for (Map.Entry<Object, CodeGenerator> e : cases.entrySet()) {
                     lb.backup().onNewLine();
                     if ("*".equals(e.getKey())) {
                         lb.switchCase(null, (lb1) -> {
-                            e.getValue().buildInto(lb1);
+                            e.getValue().generateInto(lb1);
                         });
                     } else {
                         if (e.getKey() instanceof String[]) {
                             String[] parts = (String[]) e.getKey();
-                            lb.multiCase(e.getValue()::buildInto, parts);
+                            lb.multiCase(e.getValue()::generateInto, parts);
                         } else {
                             String str = (String) e.getKey();
-                            lb.switchCase(str, e.getValue()::buildInto);
+                            lb.switchCase(str, e.getValue()::generateInto);
                         }
                     }
                 }
@@ -9048,12 +9048,12 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class ArrayValueBuilder<T> extends BodyBuilderBase {
+    public static final class ArrayValueBuilder<T> extends CodeGeneratorBase {
 
         private final char end;
 
         private final Function<ArrayValueBuilder<T>, T> converter;
-        private final List<BodyBuilder> values = new LinkedList<>();
+        private final List<CodeGenerator> values = new LinkedList<>();
         private final char start;
 
         ArrayValueBuilder(char start, char end, Function<ArrayValueBuilder<T>, T> converter) {
@@ -9116,10 +9116,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.delimit(start, end, lb -> {
-                for (Iterator<BodyBuilder> it = values.iterator(); it.hasNext();) {
-                    it.next().buildInto(lb);
+                for (Iterator<CodeGenerator> it = values.iterator(); it.hasNext();) {
+                    it.next().generateInto(lb);
                     lb.backup();
                     if (it.hasNext()) {
                         lb.appendRaw(",");
@@ -9163,11 +9163,11 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class AnnotationBuilder<T> extends BodyBuilderBase {
+    public static final class AnnotationBuilder<T> extends CodeGeneratorBase {
 
         private final Function<AnnotationBuilder<T>, T> converter;
         private final String annotationType;
-        private final Map<String, BodyBuilder> arguments = new LinkedHashMap<>();
+        private final Map<String, CodeGenerator> arguments = new LinkedHashMap<>();
 
         AnnotationBuilder(Function<AnnotationBuilder<T>, T> converter, String annotationType) {
             this.converter = converter;
@@ -9177,7 +9177,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         @Override
         public String toString() {
             LinesBuilder lb = new LinesBuilder();
-            this.buildInto(lb);
+            this.generateInto(lb);
             return lb.toString();
         }
 
@@ -9259,19 +9259,19 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.wrappable(l -> {
                 lines.onNewLine().word("@" + annotationType);
                 if (!arguments.isEmpty()) {
                     lines.parens(lb -> {
                         if (arguments.size() == 1 && arguments.containsKey("value")) {
-                            arguments.get("value").buildInto(lb);
+                            arguments.get("value").generateInto(lb);
                         } else {
                             lb.wrappable(wb -> {
-                                for (Iterator<Map.Entry<String, BodyBuilder>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                                    Map.Entry<String, BodyBuilder> e = it.next();
+                                for (Iterator<Map.Entry<String, CodeGenerator>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                                    Map.Entry<String, CodeGenerator> e = it.next();
                                     wb.word(e.getKey()).word("=");
-                                    e.getValue().buildInto(lines);
+                                    e.getValue().generateInto(lines);
                                     if (it.hasNext()) {
                                         wb.appendRaw(", ");
                                     }
@@ -9317,7 +9317,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     private List<FieldBuilder<?>> fields() {
         List<FieldBuilder<?>> all = new ArrayList<>();
-        for (BodyBuilder bb : members) {
+        for (CodeGenerator bb : members) {
             if (bb instanceof FieldBuilder<?>) {
                 all.add((FieldBuilder<?>) bb);
             }
@@ -9332,7 +9332,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
      * @return this
      */
     public ClassBuilder<T> autoToString() {
-        members.add(BodyBuilder.lazy(() -> {
+        members.add(CodeGenerator.lazy(() -> {
             MethodBuilder<Object> mb = new MethodBuilder<>(x -> {
                 return null;
             }, "toString", Modifier.PUBLIC, Modifier.FINAL)
@@ -9377,11 +9377,11 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         return this;
     }
 
-    public static final class FieldBuilder<T> extends BodyBuilderBase implements NamedMember {
+    public static final class FieldBuilder<T> extends CodeGeneratorBase implements NamedMember {
 
         private final Function<FieldBuilder<T>, T> converter;
-        private BodyBuilder type;
-        private BodyBuilder initializer;
+        private CodeGenerator type;
+        private CodeGenerator initializer;
         private final Set<Modifier> modifiers = new TreeSet<>();
         private final String name;
         private Set<AnnotationBuilder> annotations = new LinkedHashSet<>();
@@ -9557,21 +9557,21 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             if (docComment != null) {
                 writeDocComment(docComment, lines);
                 lines.onNewLine();
             }
             for (AnnotationBuilder<?> ab : annotations) {
-                ab.buildInto(lines);
+                ab.generateInto(lines);
             }
             lines.statement(lb -> {
                 for (Modifier m : modifiers) {
                     lb.word(m.toString());
                 }
                 if (type != null) {
-                    type.buildInto(lb);
+                    type.generateInto(lb);
                 }
                 lb.word(name);
                 if (initializer != null) {
@@ -9579,7 +9579,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                         if (!(initializer instanceof AssignmentBuilder<?>)) {
                             lbb.word("=");
                         }
-                        initializer.buildInto(lbb);
+                        initializer.generateInto(lbb);
                     });
                 }
             });
@@ -9712,15 +9712,15 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    static class StatementWrapper extends BodyBuilderBase {
+    static class StatementWrapper extends CodeGeneratorBase {
 
-        private final BodyBuilder bb;
+        private final CodeGenerator bb;
 
-        StatementWrapper(BodyBuilder... multi) {
+        StatementWrapper(CodeGenerator... multi) {
             this(new Composite(multi));
         }
 
-        StatementWrapper(BodyBuilder bb) {
+        StatementWrapper(CodeGenerator bb) {
             this.bb = bb;
         }
 
@@ -9733,7 +9733,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (bb instanceof Composite) {
                 Composite comp = (Composite) bb;
                 if (comp.isEmpty()) {
@@ -9741,7 +9741,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
                 }
             }
             lines.onNewLine();
-            bb.buildInto(lines);
+            bb.generateInto(lines);
             lines.backup();
             lines.statementTerminator();
         }
@@ -9758,7 +9758,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    public static final class BackupAndAppendRaw implements BodyBuilder {
+    public static final class BackupAndAppendRaw implements CodeGenerator {
 
         private final String what;
 
@@ -9767,7 +9767,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.backup();
             lines.appendRaw(what);
         }
@@ -9778,20 +9778,20 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    static final class ReturnStatement extends BodyBuilderBase {
+    static final class ReturnStatement extends CodeGeneratorBase {
 
-        private final BodyBuilder what;
+        private final CodeGenerator what;
 
-        ReturnStatement(BodyBuilder what) {
+        ReturnStatement(CodeGenerator what) {
             this.what = what;
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.statement(lb -> {
                 lb.onNewLine();
                 lb.word("return ");
-                what.buildInto(lb);
+                what.generateInto(lb);
                 lb.backup();
             });
         }
@@ -9842,8 +9842,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         return name;
     }
 
-    static BodyBuilder friendlyNumber(Number num) {
-        BodyBuilder result;
+    static CodeGenerator friendlyNumber(Number num) {
+        CodeGenerator result;
         if (num instanceof Long) {
             if (num.longValue() == Long.MAX_VALUE) {
                 result = new Adhoc("Long.MAX_VALUE");
@@ -10104,7 +10104,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }, what);
     }
 
-    public interface Value extends BodyBuilder {
+    public interface Value extends CodeGenerator {
 
         default Value times(String expression) {
             return times(new Variable(expression));
@@ -10266,34 +10266,34 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.parens(lb -> {
                 lb.appendRaw(type);
                 lines.appendRaw(' ');
                 if (target.isCompound()) {
-                    target.parenthesized().buildInto(lines);
+                    target.parenthesized().generateInto(lines);
                 } else {
-                    target.buildInto(lines);
+                    target.generateInto(lines);
                 }
             });
         }
     }
 
-    static abstract class AbstractValue implements Value, BodyBuilder {
+    static abstract class AbstractValue implements Value, CodeGenerator {
 
         @Override
         public String toString() {
             LinesBuilder lb = new LinesBuilder();
-            buildInto(lb);
+            generateInto(lb);
             return lb.toString();
         }
     }
 
     private static class Wrapper extends AbstractValue {
 
-        private final BodyBuilder bb;
+        private final CodeGenerator bb;
 
-        Wrapper(BodyBuilder bb) {
+        Wrapper(CodeGenerator bb) {
             this.bb = bb;
         }
 
@@ -10303,8 +10303,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            bb.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            bb.generateInto(lines);
         }
     }
 
@@ -10317,7 +10317,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.word(name);
         }
 
@@ -10352,8 +10352,8 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            ClassBuilder.friendlyNumber(num).buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            ClassBuilder.friendlyNumber(num).generateInto(lines);
         }
 
         @Override
@@ -10364,24 +10364,24 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
 
     static class Parenthesized extends AbstractValue {
 
-        List<BodyBuilder> contents = new ArrayList<>(3);
+        List<CodeGenerator> contents = new ArrayList<>(3);
 
         Parenthesized(Value cts) {
             this.contents.add(cts);
         }
 
-        Parenthesized(Collection<? extends BodyBuilder> cts) {
+        Parenthesized(Collection<? extends CodeGenerator> cts) {
             contents.addAll(cts);
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (contents.isEmpty()) {
                 return;
             }
             lines.parens(lb -> {
-                for (BodyBuilder bb : contents) {
-                    bb.buildInto(lb);
+                for (CodeGenerator bb : contents) {
+                    bb.generateInto(lb);
                 }
             });
         }
@@ -10403,23 +10403,23 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             if (unary.isPre()) {
-                unary.buildInto(lines);
+                unary.generateInto(lines);
                 lines.backup();
                 if (target instanceof Variable) {
                     lines.appendRaw(target.toString());
                 } else {
-                    target.buildInto(lines);
+                    target.generateInto(lines);
                 }
             } else {
                 if (target instanceof Variable) {
                     lines.appendRaw(target.toString().trim());
                 } else {
-                    target.buildInto(lines);
+                    target.generateInto(lines);
                 }
                 lines.backup();
-                unary.buildInto(lines);
+                unary.generateInto(lines);
             }
         }
 
@@ -10429,7 +10429,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
     }
 
-    private static enum Unaries implements BodyBuilder {
+    private static enum Unaries implements CodeGenerator {
         PREINCREMENT("++"),
         POSTINCREMENT("++"),
         PREDECREMENT("--"),
@@ -10456,7 +10456,7 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
+        public void generateInto(LinesBuilder lines) {
             lines.appendRaw(text);
         }
     }
@@ -10464,10 +10464,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
     static class Operation extends AbstractValue {
 
         private final Value leftSide;
-        private final BodyBuilder op;
+        private final CodeGenerator op;
         private final Value rightSide;
 
-        Operation(Value leftSide, BodyBuilder op, Value rightSide) {
+        Operation(Value leftSide, CodeGenerator op, Value rightSide) {
             this.op = op;
             this.leftSide = leftSide;
             this.rightSide = rightSide;
@@ -10479,10 +10479,10 @@ public final class ClassBuilder<T> implements BodyBuilder, NamedMember, SourceFi
         }
 
         @Override
-        public void buildInto(LinesBuilder lines) {
-            leftSide.buildInto(lines);
-            op.buildInto(lines);
-            rightSide.buildInto(lines);
+        public void generateInto(LinesBuilder lines) {
+            leftSide.generateInto(lines);
+            op.generateInto(lines);
+            rightSide.generateInto(lines);
         }
     }
 }
