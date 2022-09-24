@@ -21,14 +21,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
-package com.mastfrog.code.generation.common.builder;
+package com.mastfrog.code.generation.common.error;
 
 /**
  *
- * @author Tim Boudreau
+ * @author timb
  */
-public interface ClosableBuilder<T> {
+public final class InvalidIdentifierException extends RuntimeException {
 
-    T close();
+    private final CharSequence identifier;
+
+    public InvalidIdentifierException(CharSequence identifier) {
+        super("Invalid identifier: '" + identifier + "'");
+        this.identifier = identifier;
+    }
+
+    public InvalidIdentifierException(String message, CharSequence identifier) {
+        super(message + " in '" + identifier + "'");
+        this.identifier = identifier;
+    }
+
+    public CharSequence identifier() {
+        return identifier;
+    }
 }

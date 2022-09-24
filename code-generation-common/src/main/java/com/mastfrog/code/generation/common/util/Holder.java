@@ -48,7 +48,7 @@ public final class Holder<T> implements Consumer<T>, Supplier<T> {
         set(obj);
     }
 
-    public void set(T obj) {
+    public <O extends T> void set(O obj) {
         wasSetCalled = true;
         this.obj = obj;
     }

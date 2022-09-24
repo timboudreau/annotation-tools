@@ -24,6 +24,8 @@
 package com.mastfrog.code.generation.common;
 
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -376,6 +378,11 @@ public final class LinesBuilder {
         }
         return this;
     }
+    
+    public LinesBuilder space() {
+        sb.append(' ');
+        return this;
+    }
 
     public LinesBuilder appendRaw(char what) {
         int ix = -1;
@@ -545,6 +552,16 @@ public final class LinesBuilder {
 
     public LinesBuilder delimit(String delimiter, String... all) {
         for (int i = 0; i < all.length; i++) {
+            appendRaw(all[i]);
+            if (i != all.length - 1) {
+                sb.append(delimiter);
+            }
+        }
+        return this;
+    }
+
+    public LinesBuilder wordDelimit(String delimiter, String... all) {
+        for (int i = 0; i < all.length; i++) {
             word(all[i]);
             if (i != all.length - 1) {
                 sb.append(delimiter);
@@ -647,6 +664,17 @@ public final class LinesBuilder {
             } else {
                 appendRaw(settings.lineCommentPrefix() + part);
                 onNewLine();
+            }
+        }
+        return this;
+    }
+
+    public LinesBuilder joining(String joinWith, Iterable<? extends BodyBuilder> l) {
+        for (Iterator<? extends BodyBuilder> it = l.iterator(); it.hasNext();) {
+            BodyBuilder bb = it.next();
+            bb.buildInto(this);
+            if (it.hasNext()) {
+                word(joinWith);
             }
         }
         return this;

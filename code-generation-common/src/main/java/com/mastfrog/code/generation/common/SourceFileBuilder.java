@@ -35,6 +35,7 @@ import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  *
@@ -64,17 +65,24 @@ public interface SourceFileBuilder extends BodyBuilder {
      * @return A path
      */
     default Path sourceRootRelativePath() {
-        String pkg = namespace().orElse("..");
         String ext = fileExtension();
         if (ext.length() > 0 && ext.charAt(0) != '.') {
             ext = '.' + ext;
         }
-        if (!pkg.isEmpty()) {
-            return Paths.get(name() + ext);
-        }
-        return Paths.get(pkg.replace('.', File.separatorChar))
-                .resolve(name() + ext);
+        Path fileOnly = Paths.get(name() + ext);
+        return namespaceRelativePath().map(nsPath -> nsPath.resolve(fileOnly)).orElse(fileOnly);
+    }
 
+    default String namespaceDelimiter() {
+        return ".";
+    }
+
+    default Optional<Path> namespaceRelativePath() {
+        return namespace().map(ns -> {
+            Pattern pat = Pattern.compile(namespaceDelimiter(), Pattern.LITERAL);
+            pat.matcher(ns).replaceAll(File.separator);
+            return null;
+        });
     }
 
     /**

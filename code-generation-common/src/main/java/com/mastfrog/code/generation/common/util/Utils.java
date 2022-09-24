@@ -36,6 +36,20 @@ public final class Utils {
         return obj;
     }
 
+    public static <T extends CharSequence> T notEmpty(String name, T what) {
+        if (notNull(name, what).length() <= 0) {
+            throw new IllegalArgumentException(what + " is zero length");
+        }
+        return what;
+    }
+
+    public static String notBlank(String name, String what) {
+        if (notEmpty(name, what).trim().length() == 0) {
+            throw new IllegalArgumentException(name + " is blank");
+        }
+        return what;
+    }
+
     private Utils() {
         throw new AssertionError();
     }

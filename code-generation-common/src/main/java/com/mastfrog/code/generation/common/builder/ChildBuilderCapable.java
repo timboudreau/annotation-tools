@@ -33,7 +33,7 @@ import java.util.function.Function;
  *
  * @author Tim Boudreau
  */
-abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>> implements BodyBuilder {
+public abstract class ChildBuilderCapable<T, J extends ChildBuilderCapable<T, J>> implements BodyBuilder {
 
     protected final Function<? super J, ? extends T> converter;
 

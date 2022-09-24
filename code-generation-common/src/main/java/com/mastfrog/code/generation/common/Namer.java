@@ -21,14 +21,15 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
-package com.mastfrog.code.generation.common.builder;
+package com.mastfrog.code.generation.common;
 
 /**
+ * Abstraction for applying a name for something and returing that something.
  *
  * @author Tim Boudreau
  */
-public interface ClosableBuilder<T> {
+@FunctionalInterface
+public interface Namer<T> {
 
-    T close();
+    T named(String name);
 }

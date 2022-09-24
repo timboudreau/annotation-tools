@@ -21,14 +21,15 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
-package com.mastfrog.code.generation.common.builder;
+package com.mastfrog.code.generation.common.error;
 
 /**
  *
- * @author Tim Boudreau
+ * @author timb
  */
-public interface ClosableBuilder<T> {
+public final class IncompleteSourceElementException extends IllegalStateException {
 
-    T close();
+    public IncompleteSourceElementException(Class<?> elementBuilderType) {
+        super(elementBuilderType.getName() + " was not completed");
+    }
 }
