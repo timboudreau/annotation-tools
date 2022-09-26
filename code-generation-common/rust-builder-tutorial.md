@@ -16,7 +16,7 @@ But if you try to handle all the permutations of kinds of fields that might need
 
 On the other hand, if you invented an interface like
 
-```
+```java
 interface EqualityContributionContributor {
   void contribute(BlockBuilder<?> into, String cumulativeHashVariableName, String fieldName);
 }
@@ -83,7 +83,7 @@ So that these builders can be reused, a builder does not know what type its goin
 a builder for a source element does not *have* to implement `CodeGenerator` - it could also just
 pass the name to the caller, and let the caller do something with that:
 
-```
+```java
     public static final class ParameterNameBuilder<T> {
 
         private final Function<String, T> converter;
@@ -154,7 +154,7 @@ Developing a code generator is an iterative process - you can have useful result
  * Think about, if you were going to describe in prose, human readable text, what that code does
  * Sketch out, if you were going to turn that description into code as faithfully as possible, what that ought to look like.  For example, take a Java method call
 
-```
+```java
 Thread.currentThread().setUncaughtExceptionHandler(myHandler);
 ```
 
@@ -162,7 +162,7 @@ Turned into prose, if you were telling someone what to do to cause them to write
 
 So, we probably want an api that looks something like:
 
-```
+```java
 invoke("setUncaughtExceptionHandler").withArgument("myHandler").onInvocationOf("currentThread").on("Thread");
 ```
 
@@ -478,7 +478,7 @@ Now, the point of using builders for code generation is that they should be *nic
 the user may be adding just a single `use` statement or a known list of types, so let's add some methods that make that
 trivial:
 
-```
+```java
         /**
          * Convenience method to add multiple types and close this builder.
          *
@@ -571,7 +571,7 @@ to give the user a way to say "Here's a type name, and it's the last one, so get
 add:
 
 
-```
+```java
         /**
          * Add a final type and close this builder.
          *
@@ -620,7 +620,7 @@ Finally, we need to implement code-generation:
 At the top of this class, we implemented `Comparable` (so generated `use` statements will be nicely alpha-sorted), so
 we need to implement that now - it can simply compare on `toString()` and it will get the right result:
 
-```
+```java
         @Override
         public int compareTo(FinishableUseBuilder<?> o) {
             return toString().compareTo(o.toString());
@@ -701,7 +701,7 @@ and a way to add to them - for user convenience, allow some additional path elem
 and we need to add code to actually *render* the use statements into the generated source - after
 the line that prints line comments, in `RustBuilder.generateInto()`, insert
 
-```
+```java
         // Write use statements next
         FinishableUseBuilder.coalesce(this.uses)
                 .forEach(useStatement -> useStatement.generateInto(lines));
@@ -712,7 +712,7 @@ Lastly, sometimes a path is just a path - we should provide a way to just pass a
 type in a single string - but apply all of our validation and coalescing goodness to it:
 
 
-```
+```java
     public RustBuilder use(String fullUsePath) {
         String[] parts = fullUsePath.split("::");
         UseBuilder<RustBuilder> ub = this.using(parts[0]);
@@ -834,7 +834,7 @@ Should the "inner statement" come before "after", or after it?  There is no righ
 
 5. Imperative operation:  Return a builder instance that takes a function that adds the element it builds to its creator, so your state gets updated when the builder is completed (and the builder need make no assumptions about what type of source element contains it - you want them reusable):
 
-```
+```java
 public FooBuilder<OriginalBuilder<T>> withFoo(String foo) {
     return new FooBuilder(bldr -> { // bldr IS the builder we're instantiating here
                                     // although sometimes it might return something else - consider
@@ -849,7 +849,7 @@ public FooBuilder<OriginalBuilder<T>> withFoo(String foo) {
 
 6. As a general rule, try to avoid methods that take no arguments - sort of, *create me a builder for X* methods - a method without arguments is a wasted opportunity to provide convenience for the caller.  If you need to create a builder for some complex sub-element of code - say, a `BarBuilder<FooBuilder>`, well, `Bar` takes some arguments to methods of its own?  Say `BarBuilder` has a `Baz` sub-element.  Instead of making the caller write `whatever.newFooBuilder().withBaz(...)`, make it `whatever.withBaz(...)` and have that return the `FooBuilder` - so, that call might return a `BazBuilder<BarBuilder<FooBuilder>>` and completing `Baz` drops you into the `BarBuilder` and completing *that* drops the caller back where they started.  Contrived example:
 
-```
+```java
 public BazBuilder<BarBuilder<FooBuilder<OriginalBuilder<T>>>> withBaz(String bazStart) {
     return new FooBuilder<>(bldr -> {
         this.foo = bldr;
