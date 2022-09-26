@@ -44,7 +44,7 @@ final class JavaLinesSettings implements LinesSettings {
     }
     
     public JavaLinesSettings() {
-        this.wrapPoint = 120;
+        this.wrapPoint = 80;
         this.indentBy = 4;
     }
     

@@ -25,7 +25,6 @@ package com.mastfrog.code.generation.common;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -153,6 +152,31 @@ public final class LinesBuilder {
     public LinesBuilder backup() {
         while (sb.length() > 0 && Character.isWhitespace(sb.charAt(sb.length() - 1))) {
             sb.setLength(sb.length() - 1);
+        }
+        return this;
+    }
+
+    public LinesBuilder backupIfLastNonWhitespaceIn(char... chars) {
+        int backupTo = -1;
+        outer:
+        for (int i = sb.length() - 1; i >= 0; i--) {
+            char c = sb.charAt(i);
+            if (Character.isWhitespace(c)) {
+                continue;
+            }
+            for (char c1 : chars) {
+                if (c1 == c) {
+                    backupTo = i + 1;
+                    break outer;
+                } else {
+                    break outer;
+                }
+            }
+        }
+        if (backupTo >= 0) {
+            sb.setLength(backupTo);
+        } else {
+            backup().space();
         }
         return this;
     }
@@ -378,7 +402,7 @@ public final class LinesBuilder {
         }
         return this;
     }
-    
+
     public LinesBuilder space() {
         sb.append(' ');
         return this;
@@ -674,7 +698,18 @@ public final class LinesBuilder {
             CodeGenerator bb = it.next();
             bb.generateInto(this);
             if (it.hasNext()) {
-                word(joinWith);
+                appendRaw(joinWith);
+            }
+        }
+        return this;
+    }
+
+    public LinesBuilder join(String joinWith, Iterable<? extends String> l) {
+        for (Iterator<? extends String> it = l.iterator(); it.hasNext();) {
+            String bb = it.next();
+            appendRaw(bb);
+            if (it.hasNext()) {
+                appendRaw(joinWith);
             }
         }
         return this;

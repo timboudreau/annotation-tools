@@ -34,6 +34,18 @@ import java.util.function.Supplier;
 public interface CodeGenerator {
 
     /**
+     * A do-nothing code generator - this is occasionally, such as for cases
+     * like rust's <code>&self</code> parameter - it makes sense to use to use a
+     * Map for function arguments, but you need *something* for the type value.
+     */
+    public static final CodeGenerator EMPTY = _ignored -> {
+    };
+
+    default boolean isEmpty() {
+        return this == EMPTY;
+    }
+
+    /**
      * Drive the passed LinesBuilder to append the contents of this element to
      * it.
      *

@@ -4357,10 +4357,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
-    static final CodeGenerator EMPTY = (LinesBuilder lines) -> {
-        // do nothing
-    };
-
     public static final class LambdaBuilder<T> implements CodeGenerator {
 
         private final Function<LambdaBuilder<T>, T> converter;
@@ -7747,24 +7743,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
-    static final class Empty implements CodeGenerator {
-
-        @Override
-        public void generateInto(LinesBuilder lines) {
-            // do nothing
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            return o instanceof Empty;
-        }
-
-        @Override
-        public int hashCode() {
-            return 0;
-        }
-    }
-
     public static class ParenthesizedCondition<T> extends CodeGeneratorBase {
 
         private boolean negated;
@@ -8904,7 +8882,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             this.what = on;
         }
 
-        private boolean isEmpty() {
+        public boolean isEmpty() {
             return cases.isEmpty();
         }
 

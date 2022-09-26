@@ -21,19 +21,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.mastfrog.code.generation.common.error;
+package com.mastfrog.code.generation.common;
 
 /**
+ * Common interface for supplying a type name - the <code>ofType(String)</code>
+ * pattern is a common one.
  *
- * @author timb
+ * @author Tim Boudreau
  */
-public final class IncompleteSourceElementException extends IllegalStateException {
+@FunctionalInterface
+public interface OfType<T> {
 
-    public IncompleteSourceElementException(Class<?> elementBuilderType) {
-        super(elementBuilderType.getName() + " was not completed");
-    }
-    
-    public IncompleteSourceElementException(String msg) {
-        super(msg);
-    }
+    T ofType(String type);
 }
