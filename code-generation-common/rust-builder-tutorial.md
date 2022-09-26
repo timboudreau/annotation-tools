@@ -903,7 +903,8 @@ pub trait Bits<S: UnsignedInt>: Unpin + Display + Debug {
 
 So let's get started with our `TraitBuilder`, using the same pass-a-function pattern.  It will take the name of the trait in its constructor, and then we'll need to create builders for all of the things we see here:
 
-*PENDING: While I have draft code for this, I'd like to get it tightened down better - the rust type system - with its lifetimes and multiple different flavors of generics - is complex enough that to do this well, it is a good idea to back up here and do at least a minimal type-parser before we get here.  So, I'm ironing that out and then will come back to this.
+*PENDING: While I have draft code for this, I'd like to get it tightened down better - the rust type system - with its lifetimes and multiple different flavors of generics - is complex enough that to do this well, it is a good idea to back up here and do at least a minimal type-parser before we get here.  So, I'm ironing that out and then will come back to this.*
+
 
 
 
