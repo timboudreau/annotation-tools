@@ -24,10 +24,11 @@
 package com.mastfrog.code.generation.common.error;
 
 /**
+ * IllegalArgumentException that distingusihes invalid values.
  *
- * @author timb
+ * @author Tim Boudreau
  */
-public final class InvalidIdentifierException extends RuntimeException {
+public final class InvalidIdentifierException extends IllegalArgumentException {
 
     private final CharSequence identifier;
 

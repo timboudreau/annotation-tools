@@ -860,6 +860,91 @@ public BazBuilder<BarBuilder<FooBuilder<OriginalBuilder<T>>>> withBaz(String baz
 
 7. Expect eventually to write a small type-expression parser - being able to validate that a type-expression is valid (e.g. generics are closed, the type name is valid and similar, and possibly extract enough information to determine generally what kind of thing a type name is [for languages with "primitives" vs "objects" distinctions]) - it is useful to be able to fail early if you're generating code that no compiler on the planet will accept.  In the case of Rust, we will definitely want one, because type expressions involve paths, lifetimes and two different flavors of type parameters.  To start out with, you can just write something that accepts a string - but expect that eventually you'll want to improve on it.
 
+### Inheritance
+
+In general, the rule with inheritance and code element builders is **just don't** - the point is to create an API
+that is human readable, such that you can tell what the generated code looks like by looking at the code that
+generates it.  That means you will use a lot of different verbs and prepositions as method names, even though what they generate is
+the same - a assign a variable *to* something, you invoke a method *on* something, you call something *with* an
+arguemnt and so forth.  While it might be tempting to have the *one builder to rule them all*, the result will either
+have spurious methods that aren't relevant in all contexts, or at best be non-intuitive to use.  The goal is to
+create convenience for users of the API.  It's okay if that causes a little pain.
+
+There is one (thus far) category of exception to that rule - code block builders for if/else clauses.  Here, you've
+got a thing that has all the methods of any code block builder (which you want to be able to reuse in lambdas and the
+like), but in addition to those, it *really should have `elseIf()` and `orElse()` methods* - that is the most intuitive
+pattern for doing it - so a user can write something like:
+
+```java
+iff("x == y").invoke("foo").withArgument("bar").inScope().orElse().invoke("doSomethingElse").on("thing").endBlock();
+``
+
+or even more prettily
+
+```java
+iff("x == y", iff -> {
+    iff.invoke("foo").withArgument("bar").inScope();
+    iff.orElse(elseBlock -> {
+        elseBlock.invoke("doSomethingElse").on("thing");
+    });
+});
+```
+
+Here, we run into a problem, particularly when chaining method calls:  The return value of chainable methods 
+on our `BlockBuilder`, if it was already written just for creating vanilla code blocks, is `BlockBuilder`.
+
+We could subclass it for an `IfBlockBuilder`, but all of its methods are going to return the supertype,
+which doesn't have any `orElse()` methods, even though the concrete type we're returning does.
+
+This is where generics come to the rescue:  We're going to move all of the base class methods to a superclass,
+which - like `java.lang.Enum`, is parameterized on its own type, and the type parameter is what we will return.
+It involves one cast we'll need a `@SuppressWarnings("unchecked")` for, but which is harmless as long as we
+take care that the type parameter and the type really do always match, and don't make it possible to subclass
+the builder outside of its package, so there cannot be subclasses that do screwey things with it.
+
+The pattern looks like:
+
+```java
+public abstract class BlockBuilderBase<T, B extends BlockBuilderBase<T>> implements CodeGenerator {
+   // or more likely, extending a convenience subclass that already takes a Function in its constructor
+
+   private final List<CodeGenerator> contents = new ArrayList<>();
+
+   // ...
+   
+   @SuppressWarnings("unchecked")
+   B cast() {
+       return (B) this;
+   }
+
+   // All of our instance methods to add code will return B and call cast() to get it:
+   public B statement(String statement) {
+       contents.add(new Statement(statement));
+       return cast();
+   }
+
+   // ... and so forth
+}
+
+public final class BlockBuilder<T> extends BlockBuilderBase<T, BlockBuilder<T>> {
+   // no instance methods needed - they're all in the superclass
+}
+
+public final class IfBlockBuilder<T> extends BlockBuilderBase<T, IfBlockBuilder<T>> {
+
+   // Each child builder will be parameterized on T - capable of closing the if statement,
+   // At which point the chain of child ifs/blocks get added to the top if builder (not shown)
+   public IfBlockBuilder<T> elseIf(String condition) { ... }
+
+   public BlockBuilder<T> orElse() { ... }
+
+```
+
+So, while in general, source element builders are orthagonal enough that subclassing is genuinely
+harmfull, in the particular case where you want *all* of the functionality exactly as is - the thing
+you're creating really just builds an enhanced version of the thing its superclass creates, then
+this is the cleanest approach.
+
 
 Creating a Rust Trait Builder
 -----------------------------
@@ -904,7 +989,3 @@ pub trait Bits<S: UnsignedInt>: Unpin + Display + Debug {
 So let's get started with our `TraitBuilder`, using the same pass-a-function pattern.  It will take the name of the trait in its constructor, and then we'll need to create builders for all of the things we see here:
 
 *PENDING: While I have draft code for this, I'd like to get it tightened down better - the rust type system - with its lifetimes and multiple different flavors of generics - is complex enough that to do this well, it is a good idea to back up here and do at least a minimal type-parser before we get here.  So, I'm ironing that out and then will come back to this.*
-
-
-
-

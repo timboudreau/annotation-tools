@@ -25,6 +25,7 @@ package com.mastfrog.code.generation.common;
 
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -154,6 +155,38 @@ public final class LinesBuilder {
             sb.setLength(sb.length() - 1);
         }
         return this;
+    }
+
+    public LinesBuilder appendIfLastNonWhitespaceNotIn(char what, char... chars) {
+        if (sb.length() == 0) {
+            return this;
+        }
+        char last = sb.charAt(sb.length() - 1);
+        if (Character.isWhitespace(last)) {
+            return this;
+        }
+        for (char c : chars) {
+            if (c == last) {
+                return this;
+            }
+        }
+        return backup().appendRaw(what);
+    }
+
+    public LinesBuilder spaceIfLastNonWhitespaceNotIn(char... chars) {
+        if (sb.length() == 0) {
+            return this;
+        }
+        char last = sb.charAt(sb.length() - 1);
+        if (Character.isWhitespace(last)) {
+            return this;
+        }
+        for (char c : chars) {
+            if (c == last) {
+                return this;
+            }
+        }
+        return space();
     }
 
     public LinesBuilder backupIfLastNonWhitespaceIn(char... chars) {
@@ -404,7 +437,12 @@ public final class LinesBuilder {
     }
 
     public LinesBuilder space() {
-        sb.append(' ');
+        if (sb.length() == 0) {
+            return this;
+        }
+        if (!Character.isWhitespace(sb.charAt(sb.length() - 1))) {
+            sb.append(' ');
+        }
         return this;
     }
 
@@ -732,5 +770,36 @@ public final class LinesBuilder {
     @Override
     public String toString() {
         return sb.toString();
+    }
+
+    /**
+     * apply the passed code generator to <code>this</code> if it is not null;
+     * otherwise append the string "????". Useful so that builders toString()
+     * methods will not fail with an NPE if they are called while the builder is
+     * still being populated.
+     *
+     * @param gen A code generator or null
+     * @param placeholder A placeholder string
+     * @return this
+     */
+    public LinesBuilder generateOrPlaceholder(CodeGenerator gen) {
+        return generateOrPlaceholder(gen, "????");
+    }
+
+    /**
+     * apply the passed code generator to <code>this</code> if it is not null;
+     * otherwise use the passed placeholder string.
+     *
+     * @param gen A code generator or null
+     * @param placeholder A placeholder string
+     * @return this
+     */
+    public LinesBuilder generateOrPlaceholder(CodeGenerator gen, String placeholder) {
+        if (gen == null) {
+            appendRaw(Objects.toString(placeholder));
+        } else {
+            gen.generateInto(this);
+        }
+        return this;
     }
 }

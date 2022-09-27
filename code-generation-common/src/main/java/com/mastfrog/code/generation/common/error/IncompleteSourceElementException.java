@@ -24,15 +24,16 @@
 package com.mastfrog.code.generation.common.error;
 
 /**
+ * Exception that indicates a builder which must be completed has not been.
  *
- * @author timb
+ * @author Tim Boudreau
  */
 public final class IncompleteSourceElementException extends IllegalStateException {
 
     public IncompleteSourceElementException(Class<?> elementBuilderType) {
         super(elementBuilderType.getName() + " was not completed");
     }
-    
+
     public IncompleteSourceElementException(String msg) {
         super(msg);
     }

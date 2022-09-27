@@ -23,9 +23,15 @@
  */
 package com.mastfrog.code.generation.common.util;
 
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Objects;
+
 /**
+ * Contains a few convenience methods that avoid requireing external
+ * dependencies.
  *
- * @author timb
+ * @author Tim Boudreau
  */
 public final class Utils {
 
@@ -52,5 +58,80 @@ public final class Utils {
 
     private Utils() {
         throw new AssertionError();
+    }
+
+    /**
+     * Iterate a collection, passing elements to an IterationConsumer - often
+     * when generating code, the first and/or last elements are treated
+     * specially with regard to prepending spaces, delimiters, etc.
+     *
+     * @param <T> A type
+     * @param collection A collection of objects
+     * @param consumer A consumer
+     * @return the number of items the consumer was called for
+     */
+    public static <T> int iterate(Iterable<? extends T> collection, IterationConsumer<? super T> consumer) {
+        boolean first = true;
+        int result = 0;
+        for (Iterator<? extends T> it = collection.iterator(); it.hasNext();) {
+            boolean last = !it.hasNext();
+            consumer.onItem(it.next(), first, last);
+            result++;
+            first = false;
+        }
+        return result;
+    }
+
+    public static <T> int iterate(T[] collection, IterationConsumer<? super T> consumer) {
+        boolean first = true;
+        int result = 0;
+        int last = collection.length - 1;
+        for (int i = 0; i < collection.length; i++) {
+            consumer.onItem(collection[i], i == 0, i == last);
+        }
+        return result;
+    }
+
+    public static String join(String delimiter, Collection<? extends Object> objs) {
+        return join(delimiter, objs, new StringBuilder()).toString();
+    }
+
+    public static StringBuilder join(String delimiter, Collection<? extends Object> objs, StringBuilder into) {
+        iterate(objs, (obj, first, last) -> {
+            into.append(Objects.toString(obj));
+            if (!last) {
+                into.append(delimiter);
+            }
+        });
+        return into;
+    }
+
+    public static StringBuilder join(String delimiter, StringBuilder into, Object... objs) {
+        iterate(objs, (obj, first, last) -> {
+            into.append(Objects.toString(obj));
+            if (!last) {
+                into.append(delimiter);
+            }
+        });
+        return into;
+    }
+
+    /**
+     * A Consumer-like interface for iterating a collection, which is told
+     * whether the element it is being passed is the first and if it is the last
+     * element.
+     *
+     * @param <T> The type
+     */
+    public interface IterationConsumer<T> {
+
+        /**
+         * Called with items from the collection.
+         *
+         * @param item The item
+         * @param first Whether or not it is the first item
+         * @param last Whether or not it is the last item
+         */
+        void onItem(T item, boolean first, boolean last);
     }
 }
