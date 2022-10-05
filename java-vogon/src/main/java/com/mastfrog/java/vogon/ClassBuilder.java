@@ -10,6 +10,13 @@ import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.code.generation.common.SourceFileBuilder;
 import com.mastfrog.code.generation.common.util.Holder;
 import static com.mastfrog.code.generation.common.util.Utils.notNull;
+import static com.mastfrog.java.vogon.AssignmentOperator.AND_EQUALS;
+import static com.mastfrog.java.vogon.AssignmentOperator.DIVIDE_EQUALS;
+import static com.mastfrog.java.vogon.AssignmentOperator.MINUS_EQUALS;
+import static com.mastfrog.java.vogon.AssignmentOperator.MULTIPLY_EQUALS;
+import static com.mastfrog.java.vogon.AssignmentOperator.OR_EQUALS;
+import static com.mastfrog.java.vogon.AssignmentOperator.PLUS_EQUALS;
+import static com.mastfrog.java.vogon.AssignmentOperator.XOR_EQUALS;
 import static com.mastfrog.java.vogon.BitwiseOperators.COMPLEMENT;
 import com.mastfrog.java.vogon.ClassBuilder.FinishableConditionBuilder;
 import java.io.File;
@@ -891,6 +898,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                                 });
                             }).annotatedWith(annotationType);
             c.accept(bldr);
+            hold.ifUnset(bldr::closeAnnotation);
             return hold.get("Annotated argument builder not completed");
         }
 
@@ -2890,10 +2898,24 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         private CodeGenerator assignment;
         private final CodeGenerator varName;
         private CodeGenerator cast;
+        private AssignmentOperator operator = AssignmentOperator.EQUALS;
+        private boolean complement;
 
         AssignmentBuilder(Function<AssignmentBuilder<T>, T> converter, CodeGenerator varName) {
             this.converter = converter;
             this.varName = varName;
+        }
+
+        /**
+         * Use a particular assignment operator (+=, *=, etc.) in this
+         * assignment.
+         *
+         * @param op An assignment operator
+         * @return this
+         */
+        public AssignmentBuilder<T> using(AssignmentOperator op) {
+            this.operator = notNull("op", op);
+            return this;
         }
 
         public AssignmentBuilder<T> withType(String type) {
@@ -2901,6 +2923,11 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 throw new IllegalStateException("A type was already set: " + type);
             }
             this.type = parseTypeName(type);
+            return this;
+        }
+
+        public AssignmentBuilder<T> complement() {
+            this.complement = true;
             return this;
         }
 
@@ -3002,7 +3029,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public T toLiteral(Number num) {
-            this.type = new TypeNameItem(num.getClass().getSimpleName().toLowerCase());
+//            String tn = num.getClass().getSimpleName().toLowerCase();
+//            switch (tn) {
+//                case "integer":
+//                    tn = "int";
+//            }
+//            this.type = new TypeNameItem(tn);
             this.assignment = friendlyNumber(num);
             return converter.apply(this);
         }
@@ -3013,19 +3045,19 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return converter.apply(this);
         }
 
-        public AssignmentBuilder<T> to(Value assignment) {
+        public T to(Value assignment) {
             if (this.assignment != null) {
                 throw new IllegalStateException("Attempt to assign twice: "
                         + assignment + " and " + this.assignment);
             }
             this.assignment = assignment;
-            return this;
+            return converter.apply(this);
         }
 
         public T to(Consumer<ValueExpressionBuilder<?>> c) {
             Holder<T> hold = new Holder<>();
             ValueExpressionBuilder<Void> veb = new ValueExpressionBuilder<>(v -> {
-                this.assignment = assignment;
+                this.assignment = v;
                 hold.accept(converter.apply(this));
                 return null;
             });
@@ -3096,11 +3128,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 if (varName != null) {
                     varName.generateInto(lb);
                 }
-                lb.word("=").appendRaw(' ');
+                operator.generateInto(lines);
                 if (cast != null) {
                     cast.generateInto(lb);
                 }
-                assignment.generateInto(lb);
+                if (complement) {
+                    lines.appendRaw('~');
+                }
+                lines.generateOrPlaceholder(assignment);
             });
         }
     }
@@ -3608,7 +3643,37 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         @Override
         public B withArgument(int arg) {
-            arguments.add(new Adhoc(Integer.toString(arg)));
+            arguments.add(number(arg));
+            return cast();
+        }
+
+        @Override
+        public B withArgument(long arg) {
+            arguments.add(number(arg));
+            return cast();
+        }
+
+        @Override
+        public B withArgument(short arg) {
+            arguments.add(number(arg));
+            return cast();
+        }
+
+        @Override
+        public B withArgument(byte arg) {
+            arguments.add(number(arg));
+            return cast();
+        }
+
+        @Override
+        public B withArgument(double arg) {
+            arguments.add(number(arg));
+            return cast();
+        }
+
+        @Override
+        public B withArgument(float arg) {
+            arguments.add(number(arg));
             return cast();
         }
 
@@ -5775,7 +5840,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public T numeric(Consumer<? super ValueExpressionBuilder<? extends NumericOrBitwiseExpressionBuilder<?>>> c) {
             Holder<T> h = new Holder<>();
-            Holder<NumericOrBitwiseExpressionBuilder<Void>> hh = new Holder<>();
+            Holder<FinishableNumericOrBitwiseExpressionBuilder<Void>> hh = new Holder<>();
             ValueExpressionBuilder<NumericOrBitwiseExpressionBuilder<Void>> result
                     = new ValueExpressionBuilder<>(veb -> {
                         h.set(converter.apply(this));
@@ -5784,10 +5849,17 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                             h.set(converter.apply(this));
                             return null;
                         });
-                        hh.set(res);
+                        res.notifying(finishable -> {
+                            hh.set(finishable);
+                        });
                         return res;
                     });
             c.accept(result);
+            h.ifUnset(() -> {
+                FinishableNumericOrBitwiseExpressionBuilder<Void> n = hh.get("Numeric expression not finishable.");
+                n.endNumericExpression();
+                result.closeIfComplete();
+            });
             return h.get("Value or numeric expression not completed");
         }
 
@@ -6142,6 +6214,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public WhileBuilder<B> whileLoop() {
             return new WhileBuilder<>(false, wb -> {
+                addDebugStackTraceElementComment();
                 statements.add(wb);
                 return cast();
             });
@@ -6149,6 +6222,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public WhileBuilder<B> doWhile() {
             return new WhileBuilder<>(true, wb -> {
+                addDebugStackTraceElementComment();
                 statements.add(wb);
                 return cast();
             });
@@ -6778,6 +6852,38 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }, new Adhoc(variable));
         }
 
+        public AssignmentBuilder<B> plusAssign(String variable) {
+            return assign(variable).using(PLUS_EQUALS);
+        }
+
+        public AssignmentBuilder<B> minusAssign(String variable) {
+            return assign(variable).using(MINUS_EQUALS);
+        }
+
+        public AssignmentBuilder<B> timesAssign(String variable) {
+            return assign(variable).using(MULTIPLY_EQUALS);
+        }
+
+        public AssignmentBuilder<B> divideAssign(String variable) {
+            return assign(variable).using(DIVIDE_EQUALS);
+        }
+
+        public AssignmentBuilder<B> orAssign(String variable) {
+            return assign(variable).using(OR_EQUALS);
+        }
+
+        public AssignmentBuilder<B> moduloAssign(String variable) {
+            return assign(variable).using(OR_EQUALS);
+        }
+
+        public AssignmentBuilder<B> andAssign(String variable) {
+            return assign(variable).using(AND_EQUALS);
+        }
+
+        public AssignmentBuilder<B> xorAssign(String variable) {
+            return assign(variable).using(XOR_EQUALS);
+        }
+
         public B assignArrayElement(Consumer<ArrayElementsBuilder<AssignmentBuilder<Void>>> c) {
             Holder<B> hold = new Holder<>();
             ArrayElementsBuilder<AssignmentBuilder<Void>> bldr
@@ -6820,18 +6926,15 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B assign(String variable, Consumer<? super AssignmentBuilder<?>> c) {
-            boolean[] closed = new boolean[1];
+            Holder<B> holder = new Holder<>();
             AssignmentBuilder<Void> ab = new AssignmentBuilder<>(b -> {
-                closed[0] = true;
                 addStatement(new Composite(b, new Adhoc(";")));
+                holder.set(cast());
                 return null;
             }, new Adhoc(variable));
             c.accept(ab);
-            if (!closed[0]) {
-                throw new IllegalStateException(".to() not called on AssignmentBuilder - "
-                        + "statement not complete");
-            }
-            return cast();
+            return holder.get(".to() not called on AssignmentBuilder - "
+                    + "statement not complete");
         }
 
         public B asserting(String expression) {
@@ -6947,6 +7050,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             if (stmt.endsWith(";")) {
                 stmt = stmt.substring(0, stmt.length() - 1);
             }
+            addDebugStackTraceElementComment();
             addStatement(new OneStatement(stmt));
             return cast();
         }
@@ -6974,6 +7078,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B returning(String s) {
             addDebugStackTraceElementComment();
             addStatement(new ReturnStatement(new Adhoc(s)));
+            return cast();
+        }
+
+        public B returning(Value value) {
+            addDebugStackTraceElementComment();
+            addStatement(new ReturnStatement(notNull("value", value)));
             return cast();
         }
 
@@ -7534,6 +7644,48 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 this.as = ta.type;
                 return converter.apply(this);
             });
+        }
+
+        public T initializedTo(int intVal) {
+            this.initializer = new NumberLiteral(intVal);
+            this.as = new Adhoc("int");
+            return converter.apply(this);
+        }
+
+        public T initializedTo(long longVal) {
+            this.initializer = new NumberLiteral(longVal);
+            this.as = new Adhoc("long");
+            return converter.apply(this);
+        }
+
+        public T initializedTo(short shortVal) {
+            this.initializer = new NumberLiteral(shortVal);
+            this.as = new Adhoc("short");
+            return converter.apply(this);
+        }
+
+        public T initializedTo(byte byteVal) {
+            this.initializer = new NumberLiteral(byteVal);
+            this.as = new Adhoc("byte");
+            return converter.apply(this);
+        }
+
+        public T initializedTo(double doubleVal) {
+            this.initializer = new NumberLiteral(doubleVal);
+            this.as = new Adhoc("double");
+            return converter.apply(this);
+        }
+
+        public T initializedTo(float floatVal) {
+            this.initializer = new NumberLiteral(floatVal);
+            this.as = new Adhoc("float");
+            return converter.apply(this);
+        }
+
+        public T initializedTo(boolean booleanLiteral) {
+            this.initializer = new Adhoc(booleanLiteral ? "true" : "false");
+            this.as = new Adhoc("boolean");
+            return converter.apply(this);
         }
 
         public ValueExpressionBuilder<TypeAssignment<T>> initializedTo() {
@@ -8759,34 +8911,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
-    private static enum AssignmentOperator implements CodeGenerator {
-        EQUALS("="),
-        PLUS_EQUALS("+="),
-        MINUS_EQUALS("-="),
-        OR_EQUALS("|="),
-        AND_EQUALS("&="),
-        XOR_EQUALS("^="),
-        MOD_EQUALS("%="),
-        DIV_EQUALS("/="),
-        MUL_EQUALS("*="),;
-
-        private final String s;
-
-        private AssignmentOperator(String s) {
-            this.s = s;
-        }
-
-        @Override
-        public void generateInto(LinesBuilder lines) {
-            lines.word(s);
-        }
-
-        @Override
-        public String toString() {
-            return s;
-        }
-    }
-
     private static enum ComparisonOperation implements CodeGenerator {
         EQ("=="),
         GT(">"),
@@ -9907,53 +10031,59 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     }
 
     static String friendlyLong(Number lng) {
-        String s = Long.toString(lng.longValue(), 10);
-        boolean neg = s.charAt(0) == '-';
-        if (neg) {
-            s = s.substring(1);
-        }
-        int max = s.length();
-        if (max > 3) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = max - 1; i >= 0; i--) {
-                sb.insert(0, s.charAt(i));
-                if (i != 0 && (i + 1) % 3 == 0) {
-                    sb.insert(0, '_');
-                }
-            }
-            if (neg) {
-                sb.insert(0, '-');
-            }
-            return sb.toString();
-        } else if (neg) {
-            s = "-" + s;
-        }
-        return s;
+        return friendlyLong(lng.longValue());
     }
 
-    static String friendlyInt(Number lng) {
-        String s = Integer.toString(lng.intValue(), 10);
-        boolean neg = s.charAt(0) == '-';
+    static String friendlyLong(long num) {
+        if (num < 1000 && num > -1000) {
+            return Long.toString(num);
+        }
+        boolean neg = num < 0;
         if (neg) {
-            s = s.substring(1);
+            num = -num;
         }
-        int max = s.length();
-        if (max > 3) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = max - 1; i >= 0; i--) {
-                sb.insert(0, s.charAt(i));
-                if (i != 0 && (i + 1) % 3 == 0) {
-                    sb.insert(0, '_');
-                }
+        String val = Long.toString(num, 10);
+        StringBuilder sb = new StringBuilder(val.length() + (val.length() / 3) - 1);
+        for (int i = val.length() - 1; i >= 0; i--) {
+            int pos = val.length() - i;
+            char c = val.charAt(i);
+            sb.insert(0, c);
+            if (i > 0 && pos != 0 && pos % 3 == 0) {
+                sb.insert(0, '_');
             }
-            if (neg) {
-                sb.insert(0, '-');
-            }
-            return sb.toString();
-        } else if (neg) {
-            s = "-" + s;
         }
-        return s;
+        if (neg) {
+            sb.insert(0, '-');
+        }
+        return sb.toString();
+    }
+
+    static String friendlyInt(Number intNumber) {
+        return friendlyInt(intNumber.intValue());
+    }
+
+    static String friendlyInt(int num) {
+        if (num < 1000 && num > -1000) {
+            return Integer.toString(num);
+        }
+        boolean neg = num < 0;
+        if (neg) {
+            num = -num;
+        }
+        String val = Integer.toString(num, 10);
+        StringBuilder sb = new StringBuilder(val.length() + (val.length() / 3));
+        for (int i = val.length() - 1; i >= 0; i--) {
+            int pos = val.length() - i;
+            char c = val.charAt(i);
+            sb.insert(0, c);
+            if (i > 0 && pos != 0 && pos % 3 == 0) {
+                sb.insert(0, '_');
+            }
+        }
+        if (neg) {
+            sb.insert(0, '-');
+        }
+        return sb.toString();
     }
 
     private static void writeDocComment(String docComment, LinesBuilder lb) {
@@ -10184,12 +10314,24 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new Operation(this, BitwiseOperators.ROTATE, expression);
         }
 
+        default Value rotate(int bits) {
+            return new Operation(this, BitwiseOperators.ROTATE, number(bits));
+        }
+
         default Value shiftLeft(Value expression) {
             return new Operation(this, BitwiseOperators.SHIFT_LEFT, expression);
         }
 
         default Value shiftRight(Value expression) {
             return new Operation(this, BitwiseOperators.SHIFT_RIGHT, expression);
+        }
+
+        default Value shiftLeft(int bits) {
+            return new Operation(this, BitwiseOperators.SHIFT_LEFT, number(bits));
+        }
+
+        default Value shiftRight(int bits) {
+            return new Operation(this, BitwiseOperators.SHIFT_RIGHT, number(bits));
         }
 
         default Value complement() {
@@ -10247,13 +10389,13 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public void generateInto(LinesBuilder lines) {
             lines.parens(lb -> {
                 lb.appendRaw(type);
-                lines.appendRaw(' ');
-                if (target.isCompound()) {
-                    target.parenthesized().generateInto(lines);
-                } else {
-                    target.generateInto(lines);
-                }
             });
+            lines.appendRaw(' ');
+            if (target.isCompound()) {
+                target.parenthesized().generateInto(lines);
+            } else {
+                target.generateInto(lines);
+            }
         }
     }
 

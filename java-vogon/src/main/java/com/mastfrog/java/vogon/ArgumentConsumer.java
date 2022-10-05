@@ -44,6 +44,16 @@ public interface ArgumentConsumer<B> {
 
     B withArgument(int arg);
 
+    B withArgument(long arg);
+
+    B withArgument(short arg);
+
+    B withArgument(byte arg);
+
+    B withArgument(double arg);
+
+    B withArgument(float arg);
+
     B withArgument(char arg);
 
     B withArgument(String arg);

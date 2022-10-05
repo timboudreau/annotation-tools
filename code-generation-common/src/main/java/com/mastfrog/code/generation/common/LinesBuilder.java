@@ -392,8 +392,11 @@ public final class LinesBuilder {
                 case '\t':
                     sb.append("\\t");
                     break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
                 case '\\':
-                    sb.append("\\");
+                    sb.append("\\\\");
                     break;
                 default:
                     sb.append(c);
