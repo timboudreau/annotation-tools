@@ -9,6 +9,7 @@ import com.mastfrog.code.generation.common.CodeGenerator;
 import com.mastfrog.code.generation.common.LinesBuilder;
 import com.mastfrog.code.generation.common.SourceFileBuilder;
 import com.mastfrog.code.generation.common.util.Holder;
+import static com.mastfrog.code.generation.common.util.Utils.notEmpty;
 import static com.mastfrog.code.generation.common.util.Utils.notNull;
 import static com.mastfrog.java.vogon.AssignmentOperator.AND_EQUALS;
 import static com.mastfrog.java.vogon.AssignmentOperator.DIVIDE_EQUALS;
@@ -44,6 +45,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.lang.model.element.Modifier;
@@ -268,6 +270,11 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
     public ClassBuilder<T> lineComment(String what, boolean trailing) {
         members.add(new LineComment(what, trailing));
+        return this;
+    }
+
+    public ClassBuilder<T> blockComment(String commentText) {
+        members.add(new DocComment(commentText, true));
         return this;
     }
 
@@ -506,10 +513,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     }
 
     public ClassBuilder<T> docComment(String cmt) {
-        if (docComment != null) {
-            throw new IllegalStateException("Doc comment already set to '" + docComment + "'");
+        if (Objects.equals(docComment, cmt)) {
+            return this;
         }
-        this.docComment = cmt;
+        if (docComment != null && !docComment.isEmpty()) {
+            docComment = docComment + "\n" + cmt;
+        } else {
+            docComment = cmt;
+        }
         return this;
     }
 
@@ -749,6 +760,38 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
+    static class DocComment implements CodeGenerator {
+
+        private final String commentText;
+        private boolean block;
+
+        public DocComment(String commentText) {
+            this.commentText = commentText;
+            block = false;
+        }
+
+        public DocComment(String commentText, boolean block) {
+            this.block = block;
+            this.commentText = commentText;
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            lines.onNewLine().appendRaw(block ? "/*" : "/**");
+            for (String line : commentText.split("\n")) {
+                lines.onNewLine().appendRaw("* ").appendRaw(line.replaceAll("\\*\\/", "* /"));
+            }
+            lines.onNewLine().appendRaw("*/")
+                    .onNewLine();
+        }
+
+        public String toString() {
+            LinesBuilder lb = new LinesBuilder();
+            generateInto(lb);
+            return lb.toString();
+        }
+    }
+
     public static final class EnumConstantBuilder<T> extends CodeGeneratorBase {
 
         private final Function<EnumConstantBuilder<T>, T> converter;
@@ -760,6 +803,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public EnumConstantBuilder<T> add(String name) {
+            constants.add(new Adhoc(checkIdentifier(name)));
+            return this;
+        }
+
+        public EnumConstantBuilder<T> add(String name, String docComment) {
+            if (docComment != null) {
+                constants.add(new DocComment(docComment));
+            }
             constants.add(new Adhoc(checkIdentifier(name)));
             return this;
         }
@@ -807,7 +858,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             while (it.hasNext()) {
                 CodeGenerator bb = it.next();
                 bb.generateInto(lines);
-                if (it.hasNext()) {
+                if (it.hasNext() && !(bb instanceof DocComment)) {
                     lines.appendRaw(",");
                 }
                 if (!(bb instanceof EnumConstantBuilder<?>)) {
@@ -985,15 +1036,17 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         @Override
         public void generateInto(LinesBuilder lines) {
-            lines.parens(lb -> {
-                for (Iterator<Map.Entry<CodeGenerator, CodeGenerator>> it = arguments.entrySet().iterator(); it.hasNext();) {
-                    Map.Entry<CodeGenerator, CodeGenerator> e = it.next();
-                    e.getValue().generateInto(lb);
-                    e.getKey().generateInto(lb);
-                    if (it.hasNext()) {
-                        lb.appendRaw(",");
+            lines.hangingWrap(lb1 -> {
+                lines.parens(lb -> {
+                    for (Iterator<Map.Entry<CodeGenerator, CodeGenerator>> it = arguments.entrySet().iterator(); it.hasNext();) {
+                        Map.Entry<CodeGenerator, CodeGenerator> e = it.next();
+                        e.getValue().generateInto(lb);
+                        e.getKey().generateInto(lb);
+                        if (it.hasNext()) {
+                            lb.appendRaw(",");
+                        }
                     }
-                }
+                });
             });
             if (!throwing.isEmpty()) {
                 lines.word("throws", true);
@@ -2257,6 +2310,9 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public MethodBuilder<T> annotatedWith(String annotationType, Consumer<? super AnnotationBuilder<?>> c) {
+            if (notEmpty("annotationType", annotationType).startsWith("@")) {
+                annotationType = annotationType.substring(1);
+            }
             boolean[] built = new boolean[1];
             AnnotationBuilder<MethodBuilder<T>> bldr = annotatedWith(annotationType, built);
             c.accept(bldr);
@@ -6398,6 +6454,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return result;
         }
 
+        public IfBuilder<B> iff(Value value) {
+            addDebugStackTraceElementComment();
+            return new IfBuilder<>(ib -> {
+                addStatement(ib);
+                return cast();
+            }, value);
+        }
+
         @SuppressWarnings("unchecked")
         private B cast() {
             return (B) this;
@@ -6759,8 +6823,13 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }
         }
 
+        public B blockComment(String cmt) {
+            this.statements.add(new DocComment(cmt, true));
+            return cast();
+        }
+
         public B lineComment(String cmt) {
-            return lineComment(cmt, false);
+            return lineComment(notNull("cmt", cmt), false);
         }
 
         public B lineComment(String cmt, boolean trailing) {
@@ -6847,9 +6916,20 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public AssignmentBuilder<B> assign(String variable) {
             return new AssignmentBuilder<>(b -> {
+                addDebugStackTraceElementComment();
                 addStatement(new StatementWrapper(b));
                 return cast();
             }, new Adhoc(variable));
+        }
+
+        public FieldReferenceBuilder<AssignmentBuilder<B>> assignField(String variable) {
+            return new FieldReferenceBuilder<>(variable, frb -> {
+                return new AssignmentBuilder<>(b -> {
+                    addDebugStackTraceElementComment();
+                    addStatement(new StatementWrapper(b));
+                    return cast();
+                }, frb);
+            });
         }
 
         public AssignmentBuilder<B> plusAssign(String variable) {
@@ -7162,6 +7242,27 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             addDebugStackTraceElementComment();
             addStatement(new ReturnStatement(new Adhoc(LinesBuilder.stringLiteral(s))));
             return cast();
+        }
+
+        public StringConcatenationBuilder<B> returningStringConcatenation() {
+            return new StringConcatenationBuilder<>(null, scb -> {
+                addStatement(new ReturnStatement(scb));
+                return cast();
+            });
+        }
+
+        public B returningStringConcatenation(Consumer<StringConcatenationBuilder<?>> c) {
+            addDebugStackTraceElementComment();
+            Holder<B> hold = new Holder<>();
+            StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<>(
+                    null, bldr -> {
+                        addStatement(new ReturnStatement(bldr));
+                        hold.set(cast());
+                        return null;
+                    });
+            c.accept(scb);
+            hold.ifUnset(scb::endConcatenation);
+            return hold.get("StringConcatenationBuilder was not closed");
         }
 
         public B returningStringConcatenation(String initialLiteral, Consumer<StringConcatenationBuilder<?>> c) {
@@ -7519,6 +7620,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return as("int");
         }
 
+        public T asLong() {
+            return as("long");
+        }
+
+        public T asDouble() {
+            return as("long");
+        }
+
         public T asBoolean() {
             return as("boolean");
         }
@@ -7538,7 +7647,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         DeclarationBuilder(Function<DeclarationBuilder<T>, T> converter, String name) {
             this.converter = converter;
-            this.name = name;
+            this.name = checkIdentifier(name);
         }
 
         public T as(String type) {
@@ -7643,6 +7752,16 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new TypeAssignment<>(ta -> {
                 this.as = ta.type;
                 return converter.apply(this);
+            });
+        }
+
+        public DeclarationCast<TypeAssignment<T>> initializedWithCastTo(String type) {
+            return new DeclarationCast<>(type, dc -> {
+                this.initializer = dc;
+                return new TypeAssignment<>(ta -> {
+                    this.as = ta;
+                    return converter.apply(this);
+                });
             });
         }
 
@@ -7764,6 +7883,90 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }, arrayType);
             c.accept(bldr);
             return holder.get(() -> bldr.closeArrayLiteral());
+        }
+    }
+
+    public static class DeclarationCast<T> implements CodeGenerator {
+
+        private final Function<DeclarationCast<T>, T> converter;
+        private final CodeGenerator to;
+        private CodeGenerator target;
+
+        DeclarationCast(String to, Function<DeclarationCast<T>, T> converter) {
+            this.converter = converter;
+            this.to = parseTypeName(notNull("to", to));
+        }
+
+        public T ofExpression(String expression) {
+            target = new Adhoc(notNull("expression", expression));
+            return converter.apply(this);
+        }
+
+        public T of(int value) {
+            target = number(value);
+            return converter.apply(this);
+        }
+
+        public T of(long value) {
+            target = number(value);
+            return converter.apply(this);
+        }
+
+        public LambdaBuilder<T> ofLambda() {
+            return new LambdaBuilder<>(lb -> {
+                this.target = lb;
+                return converter.apply(this);
+            });
+        }
+
+        public T ofLambda(Consumer<? super LambdaBuilder<?>> c) {
+            Holder<T> hold = new Holder<>();
+            LambdaBuilder<?> result = new LambdaBuilder<Void>(lb -> {
+                target = lb;
+                hold.set(converter.apply(this));
+                return null;
+            });
+            c.accept(result);
+            hold.ifUnset(() -> result.body().endBlock());
+            return hold.get("Lambda builder not completed");
+        }
+
+        public FieldReferenceBuilder<T> ofField(String field) {
+            return new FieldReferenceBuilder<>(field, fb -> {
+                this.target = fb;
+                return converter.apply(this);
+            });
+        }
+
+        public InvocationBuilder<T> ofInvocationOf(String what) {
+            return new InvocationBuilder<>(ib -> {
+                target = ib;
+                return converter.apply(this);
+            }, what);
+        }
+
+        public NewBuilder<T> ofNew() {
+            return new NewBuilder<>(nb -> {
+                target = nb;
+                return converter.apply(this);
+            });
+        }
+
+        public T ofNew(Consumer<? super NewBuilder<?>> cb) {
+            Holder<T> hold = new Holder<>();
+            NewBuilder<?> result = new NewBuilder<Void>(nb -> {
+                target = nb;
+                hold.set(converter.apply(this));
+                return null;
+            });
+            cb.accept(result);
+            return hold.get("New builder not completed");
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            lines.parens(lb -> to.generateInto(lb));
+            lines.parens(lb -> lb.generateOrPlaceholder(target));
         }
     }
 
@@ -8056,7 +8259,15 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new FinishableConditionBuilder<T>(converter, crb, new Adhoc("null"));
         }
 
+        @Deprecated
         public InvocationBuilder<ComparisonBuilder<T>> invoke(String what) {
+            return new InvocationBuilder<>(ib -> {
+                clause = ib;
+                return new ComparisonBuilder<>(this);
+            }, what);
+        }
+
+        public InvocationBuilder<ComparisonBuilder<T>> invocationOf(String what) {
             return new InvocationBuilder<>(ib -> {
                 clause = ib;
                 return new ComparisonBuilder<>(this);
@@ -8489,7 +8700,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public T isGreaterThan(String expression) {
-            return equals().expression(expression).endCondition();
+            return greaterThan().expression(expression).endCondition();
         }
 
         public T isGreaterThan(int lit) {
@@ -8634,6 +8845,10 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public T equalling(boolean lit) {
             return equals().literal(lit).endCondition();
+        }
+
+        public T notEqualling(boolean lit) {
+            return notEquals().literal(lit).endCondition();
         }
 
         public InvocationBuilder<T> equallingInvocation(String what) {
@@ -8962,7 +9177,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         @Override
         public void generateInto(LinesBuilder lines) {
-            lines.word(s);
+            lines.word(s).appendRaw(' ');
         }
     }
 
@@ -9347,6 +9562,27 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return this;
         }
 
+        /**
+         * Set the value parameter to a string or array of strings and close
+         * this annotation builder.
+         *
+         * @param value The initial value
+         * @param moreValues Optional additional values
+         * @return the exit type of this builder
+         */
+        public T withValue(String value, String... moreValues) {
+            if (moreValues.length > 0) {
+                return addArrayArgument("value", avb -> {
+                    avb.literal(value);
+                    for (String m : moreValues) {
+                        avb.literal(m);
+                    }
+                }).closeAnnotation();
+            }
+            arguments.put("value", new Adhoc(LinesBuilder.stringLiteral(value)));
+            return converter.apply(this);
+        }
+
         public AnnotationBuilder<T> addArgument(String name, Class<?> type) {
             return addClassArgument(name, type.getName());
         }
@@ -9614,6 +9850,16 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }
             initializer = value;
             return this;
+        }
+
+        public DeclarationCast<TypeAssignment<T>> initializedWithCastTo(String type) {
+            return new DeclarationCast<>(type, dc -> {
+                this.initializer = dc;
+                return new TypeAssignment<>(ta -> {
+                    this.type = ta;
+                    return converter.apply(this);
+                });
+            });
         }
 
         public T initializedWith(String stringLiteral) {
@@ -9905,6 +10151,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return checkIdentifier(name, false);
     }
 
+    private static void checkKeyword(String name) {
+        if (Arrays.binarySearch(JAVA_RESERVED_SANS_IDENTIFIER_LIKE, name) >= 0) {
+            throw new IllegalArgumentException("'" + name + "' is a java keyword.");
+        }
+    }
+
     private static String checkIdentifier(String name, boolean emptyOk) {
         if (name == null) {
             throw new IllegalArgumentException("Null identifier");
@@ -9916,6 +10168,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             throw new IllegalArgumentException("Empty or all-whitespace "
                     + "identifier: '" + name + "'");
         }
+        checkKeyword(name);
         Matcher arrM = ARR.matcher(name);
         if (arrM.find()) {
             checkIdentifier(arrM.group(1));
@@ -9943,6 +10196,19 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
         return name;
     }
+
+    // This list MUST remain sorted
+    private static final String[] JAVA_RESERVED_SANS_IDENTIFIER_LIKE = new String[]{
+        "abstract", "assert", "break", "case",
+        "catch", "class", "const", "continue", "default",
+        "do", "else", "enum", "extends", "final",
+        "finally", "for", "goto", "if", "implements",
+        "import", "instanceof", "interface",
+        "native", "new", "package", "private", "protected",
+        "public", "return", "static", "strictfp",
+        "switch", "synchronized", "throw",
+        "throws", "transient", "try", "volatile", "while"
+    };
 
     static CodeGenerator friendlyNumber(Number num) {
         CodeGenerator result;
@@ -10302,6 +10568,22 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new Operation(this, BitwiseOperators.OR, expression);
         }
 
+        default Value logicalOrWith(Value expression) {
+            return new Operation(this, LogicalOperation.OR, expression);
+        }
+
+        default Value logicalOrNotWith(Value expression) {
+            return new Operation(true, this, LogicalOperation.OR, expression);
+        }
+
+        default Value logicalAndWith(Value expression) {
+            return new Operation(this, LogicalOperation.AND, expression);
+        }
+
+        default Value logicalAndNotWith(Value expression) {
+            return new Operation(true, this, LogicalOperation.AND, expression);
+        }
+
         default Value xor(Value expression) {
             return new Operation(this, BitwiseOperators.XOR, expression);
         }
@@ -10367,7 +10649,94 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new ValueWithCast(this, "double");
         }
 
+        default Value castToChar() {
+            return new ValueWithCast(this, "char");
+        }
+
+        default Value isEqualTo(String other) {
+            return new ComparisonValue(ComparisonOperation.EQ, this, variable(other));
+        }
+
+        default Value isNotNull() {
+            return isNotEqualTo("null");
+        }
+
+        default Value isNotEqualTo(String other) {
+            return new ComparisonValue(ComparisonOperation.NE, this, variable(other));
+        }
+
+        default Value isLessThan(String other) {
+            return new ComparisonValue(ComparisonOperation.LT, this, variable(other));
+        }
+
+        default Value isLessThanOrEqualTo(String other) {
+            return new ComparisonValue(ComparisonOperation.LTE, this, variable(other));
+        }
+
+        default Value isGreaterThan(String other) {
+            return new ComparisonValue(ComparisonOperation.GT, this, variable(other));
+        }
+
+        default Value isGreaterThanOrEqualTo(String other) {
+            return new ComparisonValue(ComparisonOperation.GTE, this, variable(other));
+        }
+
+        default Value isEqualTo(Value other) {
+            return new ComparisonValue(ComparisonOperation.EQ, this, other);
+        }
+
+        default Value isNotEqualTo(Value other) {
+            return new ComparisonValue(ComparisonOperation.NE, this, other);
+        }
+
+        default Value isLessThan(Value other) {
+            return new ComparisonValue(ComparisonOperation.LT, this, other);
+        }
+
+        default Value isLessThanOrEqualTo(Value other) {
+            return new ComparisonValue(ComparisonOperation.LTE, this, other);
+        }
+
+        default Value isGreaterThan(Value other) {
+            return new ComparisonValue(ComparisonOperation.GT, this, other);
+        }
+
+        default Value isGreaterThanOrEqualTo(Value other) {
+            return new ComparisonValue(ComparisonOperation.GTE, this, other);
+        }
+
+        default Value isInstance(String type) {
+            CodeGenerator rightSide = ClassBuilder.parseTypeName(type);
+            return new ComparisonValue(ComparisonOperation.INSTANCEOF, this, rightSide);
+        }
+
         boolean isCompound();
+    }
+
+    private static class ComparisonValue extends AbstractValue {
+
+        private final ComparisonOperation op;
+        private final Value leftSide;
+        private final CodeGenerator rightSide;
+
+        public ComparisonValue(ComparisonOperation op, Value leftSide, CodeGenerator rightSide) {
+            this.op = op;
+            this.leftSide = leftSide;
+            this.rightSide = rightSide;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return true;
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            leftSide.generateInto(lines);
+            op.generateInto(lines);
+            rightSide.generateInto(lines);
+        }
+
     }
 
     private static class ValueWithCast extends AbstractValue {
@@ -10583,14 +10952,23 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
     static class Operation extends AbstractValue {
 
-        private final Value leftSide;
+        private final CodeGenerator leftSide;
         private final CodeGenerator op;
         private final Value rightSide;
+        private final boolean not;
 
-        Operation(Value leftSide, CodeGenerator op, Value rightSide) {
+        Operation(CodeGenerator leftSide, CodeGenerator op, Value rightSide) {
             this.op = op;
             this.leftSide = leftSide;
             this.rightSide = rightSide;
+            this.not = false;
+        }
+
+        Operation(boolean not, CodeGenerator leftSide, CodeGenerator op, Value rightSide) {
+            this.op = op;
+            this.leftSide = leftSide;
+            this.rightSide = rightSide;
+            this.not = not;
         }
 
         @Override
@@ -10602,7 +10980,16 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public void generateInto(LinesBuilder lines) {
             leftSide.generateInto(lines);
             op.generateInto(lines);
-            rightSide.generateInto(lines);
+            if (not) {
+                lines.appendRaw('!');
+                if (!(rightSide instanceof Parenthesized)) {
+                    lines.parens(rightSide::generateInto);
+                } else {
+                    rightSide.generateInto(lines);
+                }
+            } else {
+                rightSide.generateInto(lines);
+            }
         }
     }
 }

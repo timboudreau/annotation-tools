@@ -97,7 +97,7 @@ public class ClassBuilderTest {
                     .elseIf().variable("foo").equals().literal("baz")
                     .endCondition().invoke("println").withStringLiteral("Woo hoo!")
                     .on("System.out")
-                    .elseIf().invoke("currentTypeMillis").on("System").greaterThanOrEqualto().literal(-20392020990990L).negated()
+                    .elseIf().invocationOf("currentTypeMillis").on("System").greaterThanOrEqualto().literal(-20392020990990L).negated()
                     .invoke("println").withStringLiteral("It is time").on("System.out")
                     .orElse(elseBlock -> {
                         elseBlock.invoke("println").withStringLiteral("No dice")

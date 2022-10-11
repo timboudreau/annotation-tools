@@ -123,7 +123,7 @@ public class AssertionsTest {
                             .onField("out").of("System").orElse().lineComment("do nothing").endIf();
                 });
                 bb.iff(cond -> {
-                    cond.invoke("currentTimeMillis").on("System").isGreaterThan(10000)
+                    cond.invocationOf("currentTimeMillis").on("System").isGreaterThan(10000)
                             .invoke("println").onField("out").ofField("foo").of("System");
                 });
                 bb.iff(cond -> {
@@ -131,7 +131,7 @@ public class AssertionsTest {
                             .withStringLiteral("Have a foober")
                             .onField("out").of("System");
                 });
-                bb.iff().invoke("buz").onField("wubble").ofField("foo").arrayElement(3).of("this")
+                bb.iff().invocationOf("buz").onField("wubble").ofField("foo").arrayElement(3).of("this")
                         .instanceOf("HoogerBooger").andThrow(nb -> {
                     nb.withStringLiteral("Hello!").ofType("IllegalArgumentException");
                 }).elseIf().literal(23).isGreaterThan(5.5).trying(tb -> {
@@ -142,10 +142,10 @@ public class AssertionsTest {
                 bb.iff().literal(23).equallingInvocation("currentTimeMillis").on("System")
                         .asserting("true").endIf();
 
-                bb.iff().invoke("getDefault").on("Locale").instanceOf("Pwudge")
+                bb.iff().invocationOf("getDefault").on("Locale").instanceOf("Pwudge")
                         .lineComment("whatever").endIf();
 
-                bb.iff().invoke("getDefault").on("Charset")
+                bb.iff().invocationOf("getDefault").on("Charset")
                         .equalsField("UTF_8").of("StandardCharsets")
                         .invoke("println").withStringConcatentationArgument("Charset is ")
                         .with().invoke("getDefault").on("Charset").endConcatenation().on("System")
