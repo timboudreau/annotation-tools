@@ -56,12 +56,73 @@ import static javax.lang.model.element.Modifier.STATIC;
 import static javax.lang.model.element.Modifier.VOLATILE;
 
 /**
- * Java code generator which emits the source code for a Java class.
+ * <i>Generated code should be beautiful.</i>
+ * <p>
+ * Java code generator which emits the source code for a Java class. From the
+ * entry point of a ClassBuilder, it is possible to obtain builders for every
+ * Java code structure. Builders are parametized on the type they return when
+ * completed (typically, but not always, the builder whose method created them);
+ * where possible, if there is a single code element which <i>must</i> be
+ * present in order to have valid code, that element is the last thing you
+ * supply, and it closes the builder, returning you to the thing that created it
+ * - e.g.
+ * <pre>
+ * someCodeBlock.invoke("println")
+ *  .withStringLiteral("Hello world")
+ *  .onField("out").of("System"); // returns someCodeBlock
+ * </pre>
+ * <p>
+ * (for invocation builders, you can use <code>inScope()</code> instead of
+ * <code>on(what)</code> to indicate the method is visible to the calling code
+ * and exit the builder).
+ * </p><p>
+ * Builder methods are named such that, wherever possible, code-generation code
+ * reads like a plain-English description you might say to another person to
+ * tell them what code to write - "Invoke println with the string-literal 'Hello
+ * world' on the field 'out' of 'System'" would be an unambiguous,
+ * easy-to-understand description of the line of code above, and is - less a few
+ * words - exactly what the code above also says.
+ * </p><p>
+ * Structures which are more open-ended - such as statements in a code-block, or
+ * conditions in an if-clause - require the builder to have a specific "close"
+ * or "end" method for the caller to explicitly say "I'm done here".
+ * </p>
+ * <h2>Consumer-style Builders</h2>
+ * <p>
+ * For those cases, as well as for writing complex code structures where the
+ * generation code could get unweildy if it were written as a giant chain of
+ * method calls winding in and out of different builder types, a
+ * <i><code>Consumer</code> based style</i> is supported, where you pass a
+ * consumer that takes the builder type for the source code element you want to
+ * create. This can eliminate the need to call an "I'm done here" method, as the
+ * method that accepts the consumer can simply call it for you after it calls
+ * your consumer, if the consumer did not do so.
+ * </p><p>
+ * The consumer style has the side effect that <i>the generation code winds up
+ * with a structure very similar to that of the code it generates</i>, which is
+ * generally a boon for readability. E.g.
+ * </p>
+ * <pre>
+ * someClassBuilder.method("myMethod", mth -&gt; {
+ *   mth
+ *     .withModifier(PUBLIC, STATIC)
+ *     .addArgument("String", "Message")
+ *     .annotatedWith("MyAnnotation", anno -> {
+ *       anno.addArgument("value", "whatever");
+ *     })
+ *     .body(body -&gt; {
+ *       body.invoke("println")
+ *         .withArgument("message")
+ *         .onField("out").of("System");
+ *     };
+ * });
+ *
+ * </pre>
  *
  * @author Tim Boudreau
  */
 public final class ClassBuilder<T> implements CodeGenerator, NamedMember, SourceFileBuilder,
-        Annotatable<T, ClassBuilder<T>> {
+        Annotatable<T, ClassBuilder<T>>, Imports<T, ClassBuilder<T>> {
 
     private final String name;
     private final String pkg;
@@ -195,6 +256,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
      * defined for this class
      * @return this
      */
+    @Override
     public ClassBuilder<T> importStaticFromSelf(String importName) {
         String fqn = fqn();
         staticImport(fqn + "." + importName);
@@ -210,6 +272,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
      * @param next Additional names to import
      * @return this
      */
+    @Override
     public ClassBuilder<T> importStaticFromSelf(String firstImport, String... next) {
         String fqn = fqn();
         staticImport(fqn + "." + firstImport);
@@ -343,7 +406,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     /**
      * Get the fully qualified, dot-delimited class name of this ClassBuilder.
      *
-     * @return A fully qualified name of java-package dot class name.  Inner
+     * @return A fully qualified name of java-package dot class name. Inner
      * classes are dot-delimited
      */
     public String fqn() {
@@ -353,7 +416,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     /**
      * Add an Implements clause to this ClassBuilder.
      *
-     * @param type The type it implements (ensure it is imported if it needs to be)
+     * @param type The type it implements (ensure it is imported if it needs to
+     * be)
      * @return this
      */
     public ClassBuilder<T> extending(String type) {
@@ -1301,6 +1365,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return result;
     }
 
+    @Override
     public ClassBuilder<T> importing(Iterable<? extends String> types) {
         for (String type : types) {
             importing(type);
@@ -1308,6 +1373,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return this;
     }
 
+    @Override
     public ClassBuilder<T> importing(Class<?> className, Class<?>... more) {
         Consumer<String> ic = importConsumer();
         ic.accept(className.getName());
@@ -1317,6 +1383,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return this;
     }
 
+    @Override
     public ClassBuilder<T> importing(String className, String... more) {
         Consumer<String> ic = importConsumer();
         ic.accept(className);
