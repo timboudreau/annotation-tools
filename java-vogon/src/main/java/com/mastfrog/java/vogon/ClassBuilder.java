@@ -45,7 +45,6 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.lang.model.element.Modifier;
@@ -57,11 +56,12 @@ import static javax.lang.model.element.Modifier.STATIC;
 import static javax.lang.model.element.Modifier.VOLATILE;
 
 /**
- * Quick'n'dirty java code generation that takes advantage of lambdas.
+ * Java code generator which emits the source code for a Java class.
  *
  * @author Tim Boudreau
  */
-public final class ClassBuilder<T> implements CodeGenerator, NamedMember, SourceFileBuilder {
+public final class ClassBuilder<T> implements CodeGenerator, NamedMember, SourceFileBuilder,
+        Annotatable<T, ClassBuilder<T>> {
 
     private final String name;
     private final String pkg;
@@ -340,10 +340,22 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return fullParameter;
     }
 
+    /**
+     * Get the fully qualified, dot-delimited class name of this ClassBuilder.
+     *
+     * @return A fully qualified name of java-package dot class name.  Inner
+     * classes are dot-delimited
+     */
     public String fqn() {
         return pkg + "." + name;
     }
 
+    /**
+     * Add an Implements clause to this ClassBuilder.
+     *
+     * @param type The type it implements (ensure it is imported if it needs to be)
+     * @return this
+     */
     public ClassBuilder<T> extending(String type) {
         if ("interface".equals(classType)) {
             implementsTypes.add(type);
@@ -660,6 +672,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }, true);
     }
 
+    /**
+     * Create a standalone new builder that builds a string - useful when
+     * generating example documentation.
+     *
+     * @return A new builder
+     */
     public static NewBuilder<String> constructionFragment() {
         return new NewBuilder<>(nb -> {
             LinesBuilder lb = new LinesBuilder();
@@ -668,6 +686,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         });
     }
 
+    /**
+     * Create a standalone invocation builder that builds a string - useful when
+     * generating example documentation.
+     *
+     * @return An invocation builder
+     */
     public static InvocationBuilder<String> invocationFragment(String method) {
         return new InvocationBuilder<>(ib -> {
             LinesBuilder lb = new LinesBuilder();
@@ -676,6 +700,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }, method);
     }
 
+    /**
+     * Create a standalone array builder that builds a string - useful when
+     * generating example documentation.
+     *
+     * @return An array builder
+     */
     public static ArrayValueBuilder<String> arrayFragment() {
         return new ArrayValueBuilder<>(nb -> {
             LinesBuilder lb = new LinesBuilder();
@@ -965,7 +995,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     public static final class ConstructorBuilder<T>
             extends ParameterConsumerBase<T, ConstructorBuilder<T>>
             implements ParameterConsumer<ConstructorBuilder<T>>,
-            CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>> {
+            CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>>,
+            Annotatable<T, ConstructorBuilder<T>> {
 
         private final Function<ConstructorBuilder<T>, T> converter;
         private BlockBuilder<?> body;
@@ -1004,6 +1035,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return this;
         }
 
+        @Override
         public AnnotationBuilder<ConstructorBuilder<T>> annotatedWith(String what) {
             return new AnnotationBuilder<>(ab -> {
                 annotations.add(ab);
@@ -1011,6 +1043,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }, what);
         }
 
+        @Override
         public ConstructorBuilder<T> annotatedWith(String what, Consumer<? super AnnotationBuilder<?>> c) {
             boolean[] built = new boolean[1];
             AnnotationBuilder<Void> bldr = new AnnotationBuilder<>(ab -> {
@@ -2065,7 +2098,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     public static final class MethodBuilder<T>
             extends ParameterConsumerBase<T, MethodBuilder<T>>
             implements NamedMember, ParameterConsumer<MethodBuilder<T>>,
-            CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>> {
+            CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>>,
+            Annotatable<T, MethodBuilder<T>> {
 
         private final Function<MethodBuilder<T>, T> converter;
         private final Set<Modifier> modifiers = new TreeSet<>();
@@ -9723,7 +9757,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return this;
     }
 
-    public static final class FieldBuilder<T> extends CodeGeneratorBase implements NamedMember {
+    public static final class FieldBuilder<T> extends CodeGeneratorBase
+            implements NamedMember, Annotatable<T, FieldBuilder<T>> {
 
         private final Function<FieldBuilder<T>, T> converter;
         private CodeGenerator type;
