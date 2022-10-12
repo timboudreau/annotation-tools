@@ -1076,7 +1076,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         @Override
         void putArgument(CodeGenerator type, CodeGenerator name) {
-            if (arguments.put(name, type) != null) {
+            if (arguments.put(type, name) != null) {
                 throw new IllegalStateException("Already have an argument named " + name);
             }
         }
@@ -2188,13 +2188,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         @Override
-        void putArgument(CodeGenerator type, CodeGenerator name) {
+        void putArgument(CodeGenerator name, CodeGenerator type) {
             for (ArgPair ap : args) {
                 if (name.equals(ap.name)) {
-                    throw new IllegalStateException("Already have an argument named " + name);
+                    throw new IllegalStateException("Already have an argument named "
+                            + type + ": " + ap);
                 }
             }
-            args.add(new ArgPair(name, type));
+            args.add(new ArgPair(type, name));
         }
 
         @Override
