@@ -869,18 +869,121 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
-    public static final class ConstructorBuilder<T> extends CodeGeneratorBase {
+    static abstract class ParameterConsumerBase<T, P extends ParameterConsumerBase<T, P>>
+            extends CodeGeneratorBase implements ParameterConsumer<P> {
+
+        @SuppressWarnings("unchecked")
+        P cast() {
+            return (P) this;
+        }
+
+        abstract void putArgument(CodeGenerator type, CodeGenerator name);
+
+        @Override
+        public final P addArgument(String type, String name) {
+            putArgument(new Adhoc(checkIdentifier(notNull("name", name))), parseTypeName(type));
+            return cast();
+        }
+
+        @Override
+        public final AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<P>>> addAnnotatedArgument(String annotationType) {
+            return new AnnotatedArgumentBuilder<>(
+                    annotationsAndType -> {
+                        return new ParameterNameBuilder<>(name -> {
+                            putArgument(new Adhoc(name), annotationsAndType);
+                            return cast();
+                        });
+                    }).annotatedWith(annotationType);
+        }
+
+        @Override
+        public final P addAnnotatedArgument(String annotationType, Consumer<AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>>> c) {
+            Holder<P> hold = new Holder<>();
+            AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>> bldr
+                    = new AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>(
+                            annotationsAndType -> {
+                                return new ParameterNameBuilder<>(name -> {
+                                    putArgument(new Adhoc(name), annotationsAndType);
+                                    hold.set(cast());
+                                    return null;
+                                });
+                            }).annotatedWith(annotationType);
+            c.accept(bldr);
+            hold.ifUnset(bldr::closeAnnotation);
+            return hold.get("Annotated argument builder not completed");
+        }
+
+        @Override
+        public final AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<P>>>>
+                addMultiAnnotatedArgument(String annotationType) {
+            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<P>>>(bldr -> {
+                return new ParameterNameBuilder<>(name -> {
+                    return new TypeNameBuilder<>(typeName -> {
+                        putArgument(new Adhoc(name), bldr.appendingType(typeName.type));
+                        return cast();
+                    });
+                });
+            }).annotatedWith(annotationType);
+        }
+
+        @Override
+        public final MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<P>>>
+                addMultiAnnotatedArgument() {
+            return new MultiAnnotatedArgumentBuilder<>(bldr -> {
+                return new ParameterNameBuilder<>(name -> {
+                    return new TypeNameBuilder<>(typeName -> {
+                        putArgument(new Adhoc(name), bldr.appendingType(typeName.type));
+                        return cast();
+                    });
+                });
+            });
+        }
+
+        @Override
+        public final P addMultiAnnotatedArgument(String annotationType,
+                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>>> c) {
+            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>> hold
+                    = new Holder<>();
+            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>> result
+                    = new MultiAnnotatedArgumentBuilder<>(bldr -> {
+                        return new ParameterNameBuilder<>(name -> {
+                            return new TypeNameBuilder<>(type -> {
+                                putArgument(new Adhoc(name), bldr.appendingType(type.type));
+                                hold.set(bldr);
+                                return null;
+                            });
+
+                        });
+                    });
+            c.accept(result.annotatedWith(annotationType));
+            hold.ifUnset(result::closeAnnotations);
+            return cast();
+        }
+
+    }
+
+    public static final class ConstructorBuilder<T>
+            extends ParameterConsumerBase<T, ConstructorBuilder<T>>
+            implements ParameterConsumer<ConstructorBuilder<T>>,
+            CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>> {
 
         private final Function<ConstructorBuilder<T>, T> converter;
         private BlockBuilder<?> body;
         private final Set<AnnotationBuilder<?>> annotations = new LinkedHashSet<>();
-        private final Map<CodeGenerator, CodeGenerator> arguments = new LinkedHashMap<>();
         private final Set<Modifier> modifiers = EnumSet.noneOf(Modifier.class);
         private final Set<String> throwing = new TreeSet<>();
+        private final Map<CodeGenerator, CodeGenerator> arguments = new LinkedHashMap<>();
         private StringBuilder docComment;
 
         ConstructorBuilder(Function<ConstructorBuilder<T>, T> converter) {
             this.converter = converter;
+        }
+
+        @Override
+        void putArgument(CodeGenerator type, CodeGenerator name) {
+            if (arguments.put(name, type) != null) {
+                throw new IllegalStateException("Already have an argument named " + name);
+            }
         }
 
         public ConstructorBuilder<T> docComment(String txt) {
@@ -919,81 +1022,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             if (!built[0]) {
                 bldr.closeAnnotation();
             }
-            return this;
-        }
-
-        public ConstructorBuilder<T> addArgument(String type, String name) {
-            arguments.put(new Adhoc(checkIdentifier(notNull("name", name))), parseTypeName(type));
-            return this;
-        }
-
-        public AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<ConstructorBuilder<T>>>> addAnnotatedArgument(String annotationType) {
-            return new AnnotatedArgumentBuilder<>(
-                    annotationsAndType -> {
-                        return new ParameterNameBuilder<>(name -> {
-                            arguments.put(new Adhoc(name), annotationsAndType);
-                            return this;
-                        });
-                    }).annotatedWith(annotationType);
-        }
-
-        public ConstructorBuilder<T> addAnnotatedArgument(String annotationType, Consumer<AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>>> c) {
-            Holder<ConstructorBuilder<T>> hold = new Holder<>();
-            AnnotationBuilder<AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>> bldr
-                    = new AnnotatedArgumentBuilder<ParameterNameBuilder<Void>>(
-                            annotationsAndType -> {
-                                return new ParameterNameBuilder<>(name -> {
-                                    arguments.put(new Adhoc(name), annotationsAndType);
-                                    hold.set(this);
-                                    return null;
-                                });
-                            }).annotatedWith(annotationType);
-            c.accept(bldr);
-            hold.ifUnset(bldr::closeAnnotation);
-            return hold.get("Annotated argument builder not completed");
-        }
-
-        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<ConstructorBuilder<T>>>>>
-                addMultiAnnotatedArgument(String annotationType) {
-            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<ConstructorBuilder<T>>>>(bldr -> {
-                return new ParameterNameBuilder<>(name -> {
-                    return new TypeNameBuilder<>(typeName -> {
-                        arguments.put(new Adhoc(name), bldr.appendingType(typeName.type));
-                        return this;
-                    });
-                });
-            }).annotatedWith(annotationType);
-        }
-
-        public MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<ConstructorBuilder<T>>>>
-                addMultiAnnotatedArgument() {
-            return new MultiAnnotatedArgumentBuilder<>(bldr -> {
-                return new ParameterNameBuilder<>(name -> {
-                    return new TypeNameBuilder<>(typeName -> {
-                        arguments.put(new Adhoc(name), bldr.appendingType(typeName.type));
-                        return this;
-                    });
-                });
-            });
-        }
-
-        public ConstructorBuilder<T> addMultiAnnotatedArgument(String annotationType,
-                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>>> c) {
-            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>> hold
-                    = new Holder<>();
-            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>> result
-                    = new MultiAnnotatedArgumentBuilder<>(bldr -> {
-                        return new ParameterNameBuilder<>(name -> {
-                            return new TypeNameBuilder<>(type -> {
-                                arguments.put(new Adhoc(name), bldr.appendingType(type.type));
-                                hold.set(bldr);
-                                return null;
-                            });
-
-                        });
-                    });
-            c.accept(result.annotatedWith(annotationType));
-            hold.ifUnset(result::closeAnnotations);
             return this;
         }
 
@@ -2034,17 +2062,21 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
      *
      * @param <T> The type it builds
      */
-    public static final class MethodBuilder<T> extends CodeGeneratorBase implements NamedMember {
+    public static final class MethodBuilder<T>
+            extends ParameterConsumerBase<T, MethodBuilder<T>>
+            implements NamedMember, ParameterConsumer<MethodBuilder<T>>,
+            CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>> {
 
         private final Function<MethodBuilder<T>, T> converter;
         private final Set<Modifier> modifiers = new TreeSet<>();
         private final Set<String> typeParams = new LinkedHashSet<>();
         private final Set<CodeGenerator> annotations = new LinkedHashSet<>();
         private final Set<CodeGenerator> throwing = new LinkedHashSet<>();
-        private BlockBuilderBase block;
+        private BlockBuilderBase<?, ?, ?> block;
         private String type = "void";
         private final String name;
         private String docComment;
+        private List<ArgPair> args = new LinkedList<>();
 
         MethodBuilder(Function<MethodBuilder<T>, T> converter, String name, Modifier... modifiers) {
             this.converter = converter;
@@ -2052,6 +2084,16 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             for (Modifier m : modifiers) {
                 withModifier(m);
             }
+        }
+
+        @Override
+        void putArgument(CodeGenerator type, CodeGenerator name) {
+            for (ArgPair ap : args) {
+                if (name.equals(ap.name)) {
+                    throw new IllegalStateException("Already have an argument named " + name);
+                }
+            }
+            args.add(new ArgPair(name, type));
         }
 
         @Override
@@ -2197,13 +2239,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return this;
         }
 
-        private List<ArgPair> args = new LinkedList<>();
-
-        public MethodBuilder<T> addArgument(String type, String name) {
-            args.add(new ArgPair(parseTypeName(notNull("type", type)), name));
-            return this;
-        }
-
         /**
          * Add a final varargs argument and open the body of this method for
          * writing.
@@ -2233,78 +2268,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return body(c);
         }
 
-        public AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<MethodBuilder<T>>>>>
-                addMultiAnnotatedArgument(String annotationType) {
-            return new MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<MethodBuilder<T>>>>(bldr -> {
-                return new ParameterNameBuilder<>(name -> {
-                    return new TypeNameBuilder<>(typeName -> {
-                        args.add(new ArgPair(bldr.appendingType(typeName.type), new Adhoc(name)));
-                        return this;
-                    });
-                });
-            }).annotatedWith(annotationType);
-        }
-
-        public MethodBuilder<T> addMultiAnnotatedArgument(String annotationType,
-                Consumer<AnnotationBuilder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>>> c) {
-            Holder<MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>>> hold
-                    = new Holder<>();
-            MultiAnnotatedArgumentBuilder<ParameterNameBuilder<TypeNameBuilder<Void>>> result
-                    = new MultiAnnotatedArgumentBuilder<>(bldr -> {
-                        return new ParameterNameBuilder<>(name -> {
-                            return new TypeNameBuilder<>(type -> {
-                                args.add(new ArgPair(bldr.appendingType(type.type), new Adhoc(name)));
-                                hold.set(bldr);
-                                return null;
-                            });
-                        });
-                    });
-            c.accept(result.annotatedWith(annotationType));
-            hold.ifUnset(result::closeAnnotations);
-            return this;
-        }
-
-        private static final class ArgPair extends CodeGeneratorBase {
-
-            private final CodeGenerator type;
-            private final CodeGenerator name;
-
-            ArgPair(CodeGenerator type, CodeGenerator name) {
-                this.type = type;
-                this.name = name;
-            }
-
-            ArgPair(CodeGenerator type, String name) {
-                this.type = type;
-                this.name = new Adhoc(checkIdentifier(name));
-            }
-
-            @Override
-            public void generateInto(LinesBuilder lines) {
-                type.generateInto(lines);
-                name.generateInto(lines);
-            }
-        }
-
-        private static final class VarArgType extends CodeGeneratorBase {
-
-            private final CodeGenerator type;
-
-            VarArgType(CodeGenerator type) {
-                this.type = type;
-            }
-
-            public VarArgType(String type) {
-                this(parseTypeName(notNull("type", type)));
-            }
-
-            @Override
-            public void generateInto(LinesBuilder lines) {
-                type.generateInto(lines);
-                lines.backup().appendRaw("...");
-            }
-        }
-
+        @Override
         public T emptyBody() {
             return body().lineComment("do nothing").endBlock();
         }
@@ -2338,6 +2302,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return annotatedWith("Override").closeAnnotation();
         }
 
+        @Override
         public T body(Consumer<? super BlockBuilder<?>> c) {
             Holder<T> hold = new Holder<>();
             BlockBuilder<Void> bldr = new BlockBuilder<>(bb -> {
@@ -2354,9 +2319,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         /**
-         * Use this <i>only</i> when you need toExpression toExpression pass the
-         * body builder around toExpression foreign code toExpression contribute
-         * toExpression, and be sure toExpression close it.
+         * Use this <i>only</i> when you need to pass the body builder around to
+         * foreign code to contribute to, and be sure to close it.
          *
          * @return A block builder
          */
@@ -2370,10 +2334,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }, false);
         }
 
+        @Override
         public BlockBuilder<T> body() {
             return body(new boolean[1]);
         }
 
+        @Override
         public T body(String body) {
             return body(new boolean[1]).statement(body).endBlock();
         }
@@ -2536,6 +2502,47 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return gtv.result();
         } else {
             return new TypeNameItem(typeName);
+        }
+    }
+
+    static final class ArgPair extends CodeGeneratorBase {
+
+        private final CodeGenerator type;
+        private final CodeGenerator name;
+
+        ArgPair(CodeGenerator type, CodeGenerator name) {
+            this.type = type;
+            this.name = name;
+        }
+
+        ArgPair(CodeGenerator type, String name) {
+            this.type = type;
+            this.name = new Adhoc(checkIdentifier(name));
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            type.generateInto(lines);
+            name.generateInto(lines);
+        }
+    }
+
+    static final class VarArgType extends CodeGeneratorBase {
+
+        private final CodeGenerator type;
+
+        VarArgType(CodeGenerator type) {
+            this.type = type;
+        }
+
+        public VarArgType(String type) {
+            this(parseTypeName(notNull("type", type)));
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            type.generateInto(lines);
+            lines.backup().appendRaw("...");
         }
     }
 
@@ -4478,7 +4485,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
-    public static final class LambdaBuilder<T> implements CodeGenerator {
+    public static final class LambdaBuilder<T> extends CodeGeneratorBase
+            implements CodeBlockOwner<T, BlockBuilder<T>, BlockBuilder<?>> {
 
         private final Function<LambdaBuilder<T>, T> converter;
         private BlockBuilder<?> body;
@@ -10472,13 +10480,49 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return new NumberLiteral(notNull("number", number));
     }
 
+    /**
+     * Create an invocation builder that outputs a Value instance and is not
+     * tied to a specific ClassBuilder.
+     *
+     * @param what The name of the thing being invoked.
+     * @return An invocation builder
+     */
     public static InvocationBuilder<Value> invocationOf(String what) {
         return new InvocationBuilder<>(ib -> {
             return new Wrapper(ib);
         }, what);
     }
 
+    /**
+     * Create an new instance expression builder that outputs a Value instance
+     * and is not tied to a specific ClassBuilder.
+     *
+     * @param what The name of the thing being invoked.
+     * @return An invocation builder
+     */
+    public static NewBuilder<Value> newExpression() {
+        return new NewBuilder<>(nb -> {
+            return new Wrapper(nb);
+        });
+    }
+
+    public static Value stringLiteral(String txt) {
+        return new StringLiteralValue(txt);
+    }
+
+    /**
+     * A standalone object, not associated with a specific ClassBuilder, which
+     * represents a Java expression - useful as a way to express mathematical or
+     * boolean expressions, and accepted as arguments to invocations, if
+     * conditions and declarations.
+     * <p>
+     * Instances can be obtained from the static ClassBuilder methods
+     * invocationOf(), newExpression(), variable() and number().
+     */
     public interface Value extends CodeGenerator {
+
+        public static final Value TRUE = new BooleanValue(true);
+        public static final Value FALSE = new BooleanValue(false);
 
         default Value times(String expression) {
             return times(new Variable(expression));
@@ -10710,7 +10754,79 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new ComparisonValue(ComparisonOperation.INSTANCEOF, this, rightSide);
         }
 
+        default Value ternary(Value ifTrue, Value ifFalse) {
+            return new TernaryValue(this, ifTrue, ifFalse);
+        }
+
         boolean isCompound();
+    }
+
+    private static final class StringLiteralValue extends AbstractValue {
+
+        private final String text;
+
+        public StringLiteralValue(String text) {
+            this.text = text;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return false;
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            lines.appendStringLiteral(text);
+        }
+
+    }
+
+    private static class TernaryValue extends AbstractValue {
+
+        private final Value test;
+        private final Value ifTrue;
+        private final Value ifFalse;
+
+        public TernaryValue(Value test, Value ifTrue, Value ifFalse) {
+            this.test = test;
+            this.ifTrue = ifTrue;
+            this.ifFalse = ifFalse;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return true;
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            lines.wrappable(lb -> {
+                test.generateInto(lines);
+                lb.word("?").appendRaw(' ');
+                ifTrue.generateInto(lines);
+                lb.word(":").appendRaw(' ');
+                ifFalse.generateInto(lines);
+            });
+        }
+    }
+
+    static final class BooleanValue extends AbstractValue {
+
+        private final boolean val;
+
+        private BooleanValue(boolean val) {
+            this.val = val;
+        }
+
+        @Override
+        public boolean isCompound() {
+            return false;
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            lines.word(val ? "true" : "false");
+        }
     }
 
     private static class ComparisonValue extends AbstractValue {

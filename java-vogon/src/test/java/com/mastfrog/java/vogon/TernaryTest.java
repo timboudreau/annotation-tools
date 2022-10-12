@@ -23,10 +23,15 @@
  */
 package com.mastfrog.java.vogon;
 
+import com.mastfrog.java.vogon.ClassBuilder.Value;
+import static com.mastfrog.java.vogon.ClassBuilder.invocationOf;
+import static com.mastfrog.java.vogon.ClassBuilder.number;
+import static com.mastfrog.java.vogon.ClassBuilder.stringLiteral;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.lang.model.element.Modifier;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -153,6 +158,18 @@ public class TernaryTest {
         assertTrue(contains(cb, "if", "3", "==", "blah.poof"));
 
         assertTrue(contains(cb, "if", "5", "!=", "blah.murg"));
+    }
+
+    @Test
+    public void testValueTernary() {
+        Value v = invocationOf("currentTimeMillis")
+                .on("System")
+                .modulo(number(2))
+                .parenthesized()
+                .isNotEqualTo(number(1))
+                .ternary(stringLiteral("even"), stringLiteral("odd"));
+        assertEquals("(System.currentTimeMillis()%2)!=1?\"even\":\"odd\"",
+                v.toString().replaceAll("\\s+", ""));
     }
 
     private static boolean contains(ClassBuilder<String> cb, String... what) {
