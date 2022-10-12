@@ -13,8 +13,6 @@
         <version>2.8.6</version>
     </parent>
     
-    <version>2.8.6.3</version>
-
     <artifactId>java-vogon</artifactId>
 
     <url>https://github.com/timboudreau/annotation-tools</url>
