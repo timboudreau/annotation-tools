@@ -3577,6 +3577,64 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return converter.apply(cast());
         }
 
+        /**
+         * New target.
+         *
+         * @param type Unused
+         * @return A builder
+         * @deprecated The parameter was never used and was in error
+         */
+        @Deprecated
+        public NewBuilder<T> onNew(String type) {
+            return new NewBuilder<>(nb -> {
+                this.on = nb;
+                return converter.apply(cast());
+            });
+        }
+
+        public T onThis() {
+            return on("this");
+        }
+
+        public T inScope() {
+            on = null;
+            return converter.apply(cast());
+        }
+    }
+
+    public static final class NewBuilder<T> extends InvocationBuilderBase<T, NewBuilder<T>> {
+
+        NewBuilder(Function<NewBuilder<T>, T> converter) {
+            super(converter, null, true);
+        }
+
+        public T ofType(String type) {
+            checkIdentifier(notNull("type", type));
+            name = type;
+            return converter.apply(cast());
+        }
+    }
+
+    public static abstract class InvocationBuilderBase<T, B extends InvocationBuilderBase<T, B>>
+            extends CodeGeneratorBase implements ArgumentConsumer<B> {
+
+        final Function<B, T> converter;
+        String name;
+        CodeGenerator on;
+        List<CodeGenerator> arguments = new LinkedList<>();
+        boolean isNew;
+        CodeGenerator typeParameters;
+
+        InvocationBuilderBase(Function<B, T> converter, String name) {
+            this(converter, name, false);
+        }
+
+        InvocationBuilderBase(Function<B, T> converter, String name, boolean isNew) {
+            this.converter = converter;
+            this.name = name;
+            this.isNew = isNew;
+        }
+
         public FieldReferenceBuilder<T> onField(String field) {
             FieldReferenceBuilder<T> result = new FieldReferenceBuilder<>(field, frb -> {
                 this.on = frb;
@@ -3614,21 +3672,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return holder.get("Invocation not completed");
         }
 
-        /**
-         * New target.
-         *
-         * @param type Unused
-         * @return A builder
-         * @deprecated The type parameter was never used and was in error
-         */
-        @Deprecated
-        public NewBuilder<T> onNew(String type) {
-            return new NewBuilder<>(nb -> {
-                this.on = nb;
-                return converter.apply(cast());
-            });
-        }
-
         public NewBuilder<T> onNew() {
             return new NewBuilder<>(nb -> {
                 this.on = nb;
@@ -3654,45 +3697,19 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             }, el);
         }
 
-        public T onThis() {
-            return on("this");
-        }
-
-        public T inScope() {
-            on = null;
-            return converter.apply(cast());
-        }
-    }
-
-    public static final class NewBuilder<T> extends InvocationBuilderBase<T, NewBuilder<T>> {
-
-        NewBuilder(Function<NewBuilder<T>, T> converter) {
-            super(converter, null, true);
-        }
-
-        public T ofType(String type) {
-            checkIdentifier(notNull("type", type));
-            name = type;
-            return converter.apply(cast());
-        }
-    }
-
-    public static abstract class InvocationBuilderBase<T, B extends InvocationBuilderBase<T, B>> extends CodeGeneratorBase implements ArgumentConsumer<B> {
-
-        final Function<B, T> converter;
-        String name;
-        CodeGenerator on;
-        List<CodeGenerator> arguments = new LinkedList<>();
-        boolean isNew;
-
-        InvocationBuilderBase(Function<B, T> converter, String name) {
-            this(converter, name, false);
-        }
-
-        InvocationBuilderBase(Function<B, T> converter, String name, boolean isNew) {
-            this.converter = converter;
-            this.name = name;
-            this.isNew = isNew;
+        public B parameterizedOn(String params) {
+            if (typeParameters != null) {
+                throw new IllegalStateException("Type parameters already set to '" + typeParameters
+                        + "' - attempting to set them to '" + params + "'");
+            }
+            if (params == null || params.length() < 3) {
+                throw new IllegalArgumentException("Params empty or too short to be valid: " + params);
+            }
+            if (params.charAt(0) == '<' && params.charAt(params.length() - 1) == '>') {
+                params = params.substring(1, params.length() - 1);
+            }
+            typeParameters = parseTypeName(params);
+            return cast();
         }
 
         T applyFrom(InvocationBuilderBase<?, ?> other) {
@@ -3854,6 +3871,13 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return cast();
         }
 
+        public OnTypeOrInstance<B> withMethodReference(String method) {
+            return new OnTypeOrInstance<B>(tb -> {
+                arguments.add(new MethodReference(new Adhoc(method), tb));
+                return cast();
+            });
+        }
+
         @Override
         public B withClassArgument(String arg) {
             arguments.add(new Adhoc(arg + ".class"));
@@ -4009,7 +4033,15 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         @Override
+        @Deprecated
         public NewBuilder<B> withArgumentFromNew(String what) {
+            return new NewBuilder<>(nb -> {
+                arguments.add(nb);
+                return cast();
+            });
+        }
+
+        public NewBuilder<B> withArgumentFromNew() {
             return new NewBuilder<>(nb -> {
                 arguments.add(nb);
                 return cast();
@@ -4025,6 +4057,18 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 return null;
             });
             c.accept(nb);
+            return h.get("New builder not completed.");
+        }
+
+        public B withArgumentFromNew(String what, Consumer<NewBuilder<?>> c) {
+            Holder<B> h = new Holder<>();
+            NewBuilder<Void> nb = new NewBuilder<>(b -> {
+                arguments.add(b);
+                h.set(cast());
+                return null;
+            });
+            c.accept(nb);
+            nb.ofType(what);
             return h.get("New builder not completed.");
         }
 
@@ -4090,9 +4134,18 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public void generateInto(LinesBuilder lines) {
             lines.newlineIfNewStatement();
             lines.wrappable(lbb -> {
-                if (on != null) {
-                    on.generateInto(lbb);
+                if (on != null || typeParameters != null) {
+                    if (on == null) {
+                        lbb.word("this");
+                    } else {
+                        on.generateInto(lbb);
+                    }
                     lbb.appendRaw(".");
+                    if (typeParameters != null) {
+                        lbb.angleBrackets(lb1 -> {
+                            typeParameters.generateInto(lb1);
+                        });
+                    }
                     lbb.appendRaw(name);
                 } else {
                     if (isNew) {
@@ -4115,6 +4168,27 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 });
             });
         }
+    }
+
+    public static final class OnTypeOrInstance<T> {
+
+        private final Function<CodeGenerator, T> converter;
+
+        public OnTypeOrInstance(Function<CodeGenerator, T> converter) {
+            this.converter = converter;
+        }
+
+        public T on(String expression) {
+            return converter.apply(new Adhoc(notNull("expression", expression)));
+        }
+
+        public T onType(String typeName) {
+            if (typeName.contains("<")) {
+                throw new IllegalArgumentException("Method references cannot apply to a parameterized type.");
+            }
+            return converter.apply(parseTypeName(typeName));
+        }
+
     }
 
     public static final class SimpleLoopBuilder<T> implements CodeGenerator {
@@ -4251,6 +4325,25 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             });
             body.generateInto(lines);
         }
+    }
+
+    static class MethodReference extends CodeGeneratorBase {
+
+        private final CodeGenerator method;
+        private final CodeGenerator type;
+
+        public MethodReference(CodeGenerator method, CodeGenerator type) {
+            this.method = method;
+            this.type = type;
+        }
+
+        @Override
+        public void generateInto(LinesBuilder lines) {
+            type.generateInto(lines);
+            lines.appendRaw("::").backup();
+            method.generateInto(lines);
+        }
+
     }
 
     public static final class ForVarBuilder<T> extends CodeGeneratorBase {
@@ -7758,6 +7851,10 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         DeclarationBuilder(Function<DeclarationBuilder<T>, T> converter, String name) {
             this.converter = converter;
             this.name = checkIdentifier(name);
+        }
+
+        public String declaredVariableName() {
+            return name;
         }
 
         public T as(String type) {
