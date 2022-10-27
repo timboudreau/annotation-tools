@@ -241,10 +241,25 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
     }
 
     private void addImport(String imp) {
+        if (imp.isEmpty()) {
+            return;
+        }
         if (imp.indexOf('<') >= 0) {
             throw new IllegalArgumentException("Imports cannot contain "
                     + "generics.  Attempting to import '" + imp + "'");
         }
+        if (imp.startsWith("java.lang.")) {
+            new IllegalArgumentException("Importing from java.lang: " + imp)
+                    .printStackTrace(System.err);
+        }
+        if (imp.indexOf('.') < 0) {
+            new IllegalArgumentException("Importing from default package " + imp)
+                    .printStackTrace(System.err);
+        }
+        if (imp.charAt(0) == '.') {
+            throw new IllegalArgumentException("Import may not start with '.': " + imp);
+        }
+
         imports.add(imp);
     }
 
