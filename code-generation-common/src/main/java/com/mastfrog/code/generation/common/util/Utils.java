@@ -74,8 +74,9 @@ public final class Utils {
         boolean first = true;
         int result = 0;
         for (Iterator<? extends T> it = collection.iterator(); it.hasNext();) {
+            T obj = it.next();
             boolean last = !it.hasNext();
-            consumer.onItem(it.next(), first, last);
+            consumer.onItem(obj, first, last);
             result++;
             first = false;
         }
@@ -83,7 +84,6 @@ public final class Utils {
     }
 
     public static <T> int iterate(T[] collection, IterationConsumer<? super T> consumer) {
-        boolean first = true;
         int result = 0;
         int last = collection.length - 1;
         for (int i = 0; i < collection.length; i++) {
