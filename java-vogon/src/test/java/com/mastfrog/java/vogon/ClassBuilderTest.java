@@ -23,6 +23,8 @@
  */
 package com.mastfrog.java.vogon;
 
+import com.mastfrog.java.vogon.ClassBuilder.TryBuilder;
+import com.mastfrog.java.vogon.ClassBuilder.TypeAssignment;
 import javax.lang.model.element.Modifier;
 import org.junit.jupiter.api.Test;
 
@@ -110,18 +112,41 @@ public class ClassBuilderTest {
     public void testInvocationWithNewArgBuilders() {
         ClassBuilder<String> cb = ClassBuilder.forPackage("com.foo").named("whatever")
                 .method("foo").body(bb -> {
-                    bb.invoke("thing", ib -> {
-                        ib.withStringConcatentationArgument("called ").with().field("hey").ofThis()
-                                .with().literal(" and then there is \"quoted\" stuff ")
-                                .with().invoke("currentTimeMillis").on("System")
-                                .endConcatenation().onThis();
-                                ;
+            bb.invoke("thing", ib -> {
+                ib.withStringConcatentationArgument("called ").with().field("hey").ofThis()
+                        .with().literal(" and then there is \"quoted\" stuff ")
+                        .with().invoke("currentTimeMillis").on("System")
+                        .endConcatenation().onThis();
+                ;
+            });
+            bb.invoke("doSomething").withArgument().field("hey").ofThis()
+                    .withArgument(23).onField("hey").ofNew(nb -> {
+                nb.ofType("Thingamabob");
+            });
+        });
+    }
+
+    @Test
+    public void testTryWithResources() {
+        ClassBuilder<String> cb = ClassBuilder.forPackage("com.foo").named("Whee")
+                .method("foo", mb -> {
+                    mb.addArgument("Path", "path");
+                    mb.body(bb -> {
+                        bb.tryWithResources("stream", db -> {
+                            TryBuilder<Void> block = db.initializedByInvoking("newInputStream")
+                                    .withArgument("path")
+                                    .withArgumentFromField("READ")
+                                    .of("StandardStuff")
+                                    .on("Files")
+                                    .as("InputStream");
+                            block.invoke("copy").withArgument("input")
+                                    .withArgument("output")
+                                    .on("FileUtils")
+                                    .endBlock();
+                        });
                     });
-                    bb.invoke("doSomething").withArgument().field("hey").ofThis()
-                            .withArgument(23).onField("hey").ofNew(nb -> {
-                                nb.ofType("Thingamabob");
-                            });
                 });
+        System.out.println(cb);
     }
 
 }

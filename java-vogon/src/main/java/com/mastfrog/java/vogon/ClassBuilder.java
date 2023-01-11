@@ -44,6 +44,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -248,7 +249,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             throw new IllegalArgumentException("Imports cannot contain "
                     + "generics.  Attempting to import '" + imp + "'");
         }
-        if (imp.startsWith("java.lang.")) {
+        if (imp.startsWith("java.lang.") && imp.lastIndexOf('.') == "java.lang.".length() - 1) {
             new IllegalArgumentException("Importing from java.lang: " + imp)
                     .printStackTrace(System.err);
         }
@@ -530,6 +531,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return ClassBuilder.this;
         }).withImportConsumer(importConsumer());
         result.parent = this;
+        result.prev = this;
+        result.generateDebugCode = generateDebugCode;
         return result;
     }
 
@@ -541,6 +544,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return null;
         }).withImportConsumer(importConsumer());
         bldr.parent = this;
+        bldr.prev = this;
+        bldr.generateDebugCode = generateDebugCode;
         c.accept(bldr);
         if (!built[0]) {
             bldr.build();
@@ -1641,26 +1646,50 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         return this;
     }
 
+    private <T> T inContext(Supplier<T> supp) {
+        ClassBuilder<?> old = CONTEXT.get();
+        try {
+            return supp.get();
+        } finally {
+            CONTEXT.set(old);
+        }
+    }
+
+    private void inContext(Runnable supp) {
+        ClassBuilder<?> old = CONTEXT.get();
+        try {
+            supp.run();
+        } finally {
+            CONTEXT.set(old);
+        }
+    }
+
     private FieldBuilder<ClassBuilder<T>> field(String name, boolean[] built) {
         return new FieldBuilder<>(fb -> {
-            if (contains(fb)) {
-                throw new IllegalStateException("Already have a field " + fb.name + " in " + this.fields());
-            }
-            members.add(fb);
-            built[0] = true;
-            return ClassBuilder.this;
+            return inContext(() -> {
+                if (contains(fb)) {
+                    throw new IllegalStateException("Already have a field " + fb.name + " in " + this.fields());
+                }
+                ClassBuilder<?> old = CONTEXT.get();
+                addDebugStackTraceElementComment();
+                members.add(fb);
+                built[0] = true;
+                return ClassBuilder.this;
+            });
         }, name);
     }
 
     public ClassBuilder<T> method(String name, Consumer<? super MethodBuilder<?>> c) {
-        boolean[] built = new boolean[1];
-        addDebugStackTraceElementComment();
-        MethodBuilder<ClassBuilder<T>> mb = method(name, built);
-        c.accept(mb);
-        if (!built[0]) {
-            mb.closeMethod();
-        }
-        return this;
+        return inContext(() -> {
+            boolean[] built = new boolean[1];
+            addDebugStackTraceElementComment();
+            MethodBuilder<ClassBuilder<T>> mb = method(name, built);
+            c.accept(mb);
+            if (!built[0]) {
+                mb.closeMethod();
+            }
+            return this;
+        });
     }
 
     public ClassBuilder<T> protectedMethod(String name, Consumer<? super MethodBuilder<?>> c) {
@@ -1749,17 +1778,20 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         Exception[] prev = new Exception[1];
         addDebugStackTraceElementComment();
         MethodBuilder<ClassBuilder<T>> result = new MethodBuilder<>(mb -> {
-            if (prev[0] != null) {
-                throw new IllegalStateException("Method built twice", prev[0]);
-            }
-            prev[0] = new Exception("Build '" + name + "'");
+            return inContext(() -> {
+                if (prev[0] != null) {
+                    throw new IllegalStateException("Method built twice", prev[0]);
+                }
+                prev[0] = new Exception("Build '" + name + "'");
 
-            if (contains(mb)) {
-                throw new IllegalStateException("A method named " + mb.name + "(" + mb.sig() + ") already added to " + name);
-            }
-            members.add(mb);
-            built[0] = true;
-            return ClassBuilder.this;
+                if (contains(mb)) {
+                    throw new IllegalStateException("A method named " + mb.name + "(" + mb.sig() + ") already added to " + name);
+                }
+                emitDebugLineComment(members);
+                members.add(mb);
+                built[0] = true;
+                return ClassBuilder.this;
+            });
         }, name);
         for (Modifier m : modifiers) {
             result.withModifier(m);
@@ -3639,6 +3671,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         List<CodeGenerator> arguments = new LinkedList<>();
         boolean isNew;
         CodeGenerator typeParameters;
+        boolean chained;
 
         InvocationBuilderBase(Function<B, T> converter, String name) {
             this(converter, name, false);
@@ -3671,6 +3704,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public InvocationBuilder<T> onInvocationOf(String methodName) {
             return new InvocationBuilder<>(ib2 -> {
+                chained = true;
                 on = ib2;
                 return converter.apply(cast());
             }, methodName);
@@ -3679,6 +3713,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public T onInvocationOf(String methodName, Consumer<? super InvocationBuilder<?>> c) {
             Holder<T> holder = new Holder<>();
             InvocationBuilder<Void> inv = new InvocationBuilder<>(ib -> {
+                chained = true;
                 on = ib;
                 holder.set(converter.apply(cast()));
                 return null;
@@ -3689,6 +3724,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public NewBuilder<T> onNew() {
             return new NewBuilder<>(nb -> {
+                chained = true;
                 this.on = nb;
                 return converter.apply(cast());
             });
@@ -3697,6 +3733,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public T onNew(Consumer<NewBuilder<?>> c) {
             Holder<T> holder = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
+                chained = true;
                 this.on = nb;
                 holder.set(converter.apply(cast()));
                 return null;
@@ -4155,6 +4192,9 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                     } else {
                         on.generateInto(lbb);
                     }
+                    if (chained) {
+                        lines.onNewLine();
+                    }
                     lbb.appendRaw(".");
                     if (typeParameters != null) {
                         lbb.angleBrackets(lb1 -> {
@@ -4464,9 +4504,15 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         private CodeGenerator finallyBlock;
         private boolean tryBuilt;
         private T buildResult;
+        private final CodeGenerator resource;
 
-        public TryBuilder(Function<? super CodeGenerator, T> converter) {
+        TryBuilder(Function<? super CodeGenerator, T> converter) {
+            this(null, converter);
+        }
+
+        TryBuilder(CodeGenerator resource, Function<? super CodeGenerator, T> converter) {
             super(converter, true);
+            this.resource = resource;
         }
 
         @Override
@@ -4478,6 +4524,9 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public void generateInto(LinesBuilder lines) {
             lines.onNewLine();
             lines.word("try ");
+            if (resource != null) {
+                lines.parens(resource::generateInto);
+            }
             super.generateInto(lines);
             for (CatchBuilder<?> cb : catches) {
                 lines.backup();
@@ -4498,7 +4547,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             if (tryBuilt) {
                 return buildResult;
             }
-            if (finallyBlock == null && catches.isEmpty()) {
+            if (finallyBlock == null && catches.isEmpty() && resource == null) {
                 throw new IllegalStateException("Try block does not have any "
                         + "catch or finally blocks and will result in an uncompilable "
                         + "source.");
@@ -6385,19 +6434,43 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
     }
 
+    static void emitDebugLineComment(List<? super CodeGenerator> into) {
+        debugLineComment().ifPresent(lc -> {
+            if (into.isEmpty() || !into.get(into.size() - 1).equals(lc)) {
+                into.add(lc);
+            }
+        });
+    }
+
+    static Optional<LineComment> debugLineComment() {
+        if (CONTEXT.get() != null && CONTEXT.get().generateDebugCode) {
+            Exception ex = new Exception();
+            StackTraceElement[] els = ex.getStackTrace();
+            if (els != null && els.length > 0) {
+                String pkg = ClassBuilder.class.getPackage().getName();
+                for (StackTraceElement e : els) {
+                    if (!e.getClassName().startsWith(pkg) && !e.toString().contains("Native")) {
+                        return Optional.of(new LineComment(stripPackage(e), false));
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     private void addDebugStackTraceElementComment() {
-        if (CONTEXT.get() != null) {
-            if (CONTEXT.get().generateDebugCode) {
-                Exception ex = new Exception();
-                StackTraceElement[] els = ex.getStackTrace();
-                if (els != null && els.length > 0) {
-                    String pkg = ClassBuilder.class.getPackage().getName();
-                    for (StackTraceElement e : els) {
-                        if (!e.getClassName().startsWith(pkg)) {
-//                                lineComment(stripPackage(e));
-                            this.members.add(new LineComment(stripPackage(e), false));
-                            break;
+        if ((CONTEXT.get() != null && CONTEXT.get().generateDebugCode) || generateDebugCode) {
+            Exception ex = new Exception();
+            StackTraceElement[] els = ex.getStackTrace();
+            if (els != null && els.length > 0) {
+                String pkg = ClassBuilder.class.getPackage().getName();
+                for (StackTraceElement e : els) {
+                    if (!e.getClassName().startsWith(pkg) && !e.toString().contains("Native")) {
+                        LineComment lc = new LineComment(stripPackage(e), false);
+                        if (this.members.isEmpty() || !lc.equals(this.members.get(this.members.size() - 1))) {
+                            this.members.add(lc);
                         }
+                        break;
                     }
                 }
             }
@@ -6450,27 +6523,17 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         BlockBuilderBase(Function<? super B, T> converter, boolean openBlock) {
             this.converter = converter;
             this.openBlock = openBlock;
-            addDebugStackTraceElementComment();
         }
 
         abstract X x();
 
-        private void addDebugStackTraceElementComment() {
-            if (CONTEXT.get() != null) {
-                if (CONTEXT.get().generateDebugCode) {
-                    Exception ex = new Exception();
-                    StackTraceElement[] els = ex.getStackTrace();
-                    if (els != null && els.length > 0) {
-                        String pkg = ClassBuilder.class.getPackage().getName();
-                        for (StackTraceElement e : els) {
-                            if (!e.getClassName().startsWith(pkg)) {
-                                lineComment(stripPackage(e));
-                                break;
-                            }
-                        }
-                    }
-                }
+        B add(CodeGenerator gen) {
+            emitDebugLineComment(statements);
+            statements.add(gen);
+            if (probe != null) {
+                probe.accept(cast(), gen);
             }
+            return cast();
         }
 
         B probeAdditionsWith(BiConsumer<? super B, ? super CodeGenerator> c) {
@@ -6479,34 +6542,22 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return cast();
         }
 
-        void addStatement(CodeGenerator bb) {
-            statements.add(bb);
-            if (probe != null) {
-                probe.accept(cast(), bb);
-            }
-        }
-
         public WhileBuilder<B> whileLoop() {
             return new WhileBuilder<>(false, wb -> {
-                addDebugStackTraceElementComment();
-                statements.add(wb);
-                return cast();
+                return add(wb);
             });
         }
 
         public WhileBuilder<B> doWhile() {
             return new WhileBuilder<>(true, wb -> {
-                addDebugStackTraceElementComment();
-                statements.add(wb);
-                return cast();
+                return add(wb);
             });
         }
 
         public B whileLoop(Consumer<WhileBuilder<?>> c) {
             Holder<B> hold = new Holder<>();
             WhileBuilder<Void> result = new WhileBuilder<>(false, wb -> {
-                statements.add(wb);
-                hold.set(cast());
+                hold.set(add(wb));
                 return null;
             });
             c.accept(result);
@@ -6516,8 +6567,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B doWhile(Consumer<WhileBuilder<?>> c) {
             Holder<B> hold = new Holder<>();
             WhileBuilder<Void> result = new WhileBuilder<>(true, wb -> {
-                statements.add(wb);
-                hold.set(cast());
+                hold.set(add(wb));
                 return null;
             });
             c.accept(result);
@@ -6526,7 +6576,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public ValueExpressionBuilder<T> returningValue() {
             return new ValueExpressionBuilder<>(veb -> {
-                addStatement(new ReturnStatement(veb));
+                add(new ReturnStatement(veb));
                 return endBlock();
             });
         }
@@ -6534,8 +6584,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public T returningValue(Consumer<ValueExpressionBuilder<?>> c) {
             Holder<T> holder = new Holder<>();
             ValueExpressionBuilder<Void> result = new ValueExpressionBuilder<>(veb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(veb));
+                add(new ReturnStatement(veb));
                 holder.set(endBlock());
                 return null;
             });
@@ -6545,8 +6594,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public NewBuilder<T> returningNew() {
             return new NewBuilder<>(nb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(nb));
+                add(new ReturnStatement(nb));
                 return endBlock();
             });
         }
@@ -6554,8 +6602,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public T returningNew(Consumer<? super NewBuilder<?>> c) {
             Holder<T> h = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(nb));
+                add(new ReturnStatement(nb));
                 h.set(endBlock());
                 return null;
             });
@@ -6567,8 +6614,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             Holder<T> h = new Holder<>();
             boolean[] done = new boolean[1];
             LambdaBuilder<Void> result = new LambdaBuilder<>(lb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(lb));
+                add(new ReturnStatement(lb));
                 done[0] = true;
                 h.set(endBlock());
                 return null;
@@ -6583,8 +6629,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public LambdaBuilder<T> returningLambda() {
             LambdaBuilder<T> result = new LambdaBuilder<>(lb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(lb));
+                add(new ReturnStatement(lb));
                 return endBlock();
             });
             return result;
@@ -6592,8 +6637,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public NewBuilder<MethodBuilder<T>> invokeConstructor() {
             NewBuilder<MethodBuilder<T>> result = new NewBuilder<>(nb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new StatementWrapper(nb));
+                add(new StatementWrapper(nb));
+                // XXX I'm not sure what this is, but it's wrong.
                 return null;
             });
             return result;
@@ -6602,9 +6647,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B invokeConstructor(Consumer<? super NewBuilder<?>> c) {
             Holder<B> h = new Holder<>();
             NewBuilder<?> result = new NewBuilder<>(nb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new StatementWrapper(nb));
-                h.set(cast());
+                h.set(add(new StatementWrapper(nb)));
                 return null;
             });
             c.accept(result);
@@ -6612,12 +6655,10 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public IfBuilder<B> ifNotNull(String expression) {
-            addDebugStackTraceElementComment();
-            return BlockBuilderBase.this.iff().variable(expression).notEquals().expression("null").endCondition();
+            return iff().variable(expression).notEquals().expression("null").endCondition();
         }
 
         public B ifNotNull(String expression, Consumer<? super IfBuilder<?>> c) {
-            addDebugStackTraceElementComment();
             return iff(cb -> {
                 cb.variable(expression).notEquals().expression("null").endCondition(ib2 -> {
                     c.accept(ib2);
@@ -6626,12 +6667,10 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public IfBuilder<B> ifNull(String expression) {
-            addDebugStackTraceElementComment();
             return BlockBuilderBase.this.iff().variable(expression).equals().expression("null").endCondition();
         }
 
         public B ifNull(String expression, Consumer<? super IfBuilder<?>> c) {
-            addDebugStackTraceElementComment();
             return iff(cb -> {
                 cb.variable(expression).equals().expression("null").endCondition(ib2 -> {
                     c.accept(ib2);
@@ -6644,8 +6683,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             Holder<IfBuilder<Void>> ibh = new Holder<>();
             ConditionBuilder<IfBuilder<Void>> result = new ConditionBuilder<>(fcb -> {
                 IfBuilder<Void> ib2 = new IfBuilder<>(ib -> {
-                    addStatement(ib);
-                    h.set(cast());
+                    h.set(add(ib));
                     return null;
                 }, fcb);
                 ibh.set(ib2);
@@ -6661,11 +6699,9 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public ConditionBuilder<IfBuilder<B>> iff() {
-            addDebugStackTraceElementComment();
             ConditionBuilder<IfBuilder<B>> result = new ConditionBuilder<>(fcb -> {
                 IfBuilder<B> ib2 = new IfBuilder<>(ib -> {
-                    addStatement(ib);
-                    return cast();
+                    return add(ib);
                 }, fcb);
                 return ib2;
             });
@@ -6673,10 +6709,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public IfBuilder<B> iff(Value value) {
-            addDebugStackTraceElementComment();
             return new IfBuilder<>(ib -> {
-                addStatement(ib);
-                return cast();
+                return add(ib);
             }, value);
         }
 
@@ -6687,7 +6721,6 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public B conditionally(boolean test, Consumer<? super B> cb) {
             if (test) {
-                addDebugStackTraceElementComment();
                 cb.accept(cast());
             }
             return cast();
@@ -6798,7 +6831,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 CONTEXT.get().logger();
             }
             return new LogLineBuilder<>(llb -> {
-                addStatement(llb);
+                statements.add(llb);
                 return cast();
             }, level);
         }
@@ -6921,7 +6954,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B blankLine() {
-            addStatement(new DoubleNewline());
+            statements.add(new DoubleNewline());
             return cast();
         }
 
@@ -6937,9 +6970,8 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         private LambdaBuilder<B> lambda(boolean[] built) {
             return new LambdaBuilder<>(lb -> {
-                addStatement(lb);
                 built[0] = true;
-                return cast();
+                return add(lb);
             });
         }
 
@@ -6967,8 +6999,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         private BlockBuilder<B> synchronizeOn(String what, boolean[] built) {
             SynchronizedBlockBuilder<B> res = new SynchronizedBlockBuilder<>(sb -> {
-                addStatement(sb);
-                return cast();
+                return add(sb);
             }, what);
             return res.block();
         }
@@ -6980,7 +7011,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         private SimpleLoopBuilder<B> simpleLoop(String type, String loopVarName, boolean[] built) {
             return new SimpleLoopBuilder<>(slb -> {
                 if (!built[0]) {
-                    addStatement(slb);
+                    add(slb);
                     built[0] = true;
                 }
                 return cast();
@@ -7014,8 +7045,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         private ForVarBuilder<B> forVar(String name, boolean[] built) {
             return new ForVarBuilder<>(fvb -> {
                 built[0] = true;
-                addStatement(fvb);
-                return cast();
+                return add(fvb);
             }, name);
         }
 
@@ -7051,24 +7081,48 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B lineComment(String cmt, boolean trailing) {
-            addStatement(new LineComment(cmt, trailing));
-            return cast();
+            return add(new LineComment(cmt, trailing));
         }
 
         public TryBuilder<B> trying() {
             TryBuilder<B> tb = new TryBuilder<>(b -> {
-                addDebugStackTraceElementComment();
-                addStatement(b);
-                return cast();
+                return add(b);
             });
             return tb;
+        }
+
+        public B tryWithResources(String name, Consumer<? super DeclarationBuilder<TryBuilder<Void>>> c) {
+            Holder<B> hold = new Holder<>();
+            Holder<TryBuilder<Void>> h2 = new Holder<>();
+            DeclarationBuilder<TryBuilder<Void>> result = new DeclarationBuilder<>(db -> {
+                TryBuilder<Void> tb = new TryBuilder<>(db.omitNewline(), tri -> {
+                    hold.set(add(tri));
+                    return null;
+                });
+                h2.set(tb);
+                return tb;
+            }, name);
+            c.accept(result);
+            hold.ifUnset(() -> {
+                if (h2.isSet()) {
+                    h2.get().endBlock();
+                }
+            });
+            return hold.get(() -> "Try-with-resources on " + name + " not completed");
+        }
+
+        public DeclarationBuilder<TryBuilder<B>> tryWithResources(String name) {
+            return new DeclarationBuilder<>(db -> {
+                return new TryBuilder<>(db.omitNewline(), tri -> {
+                    return add(tri);
+                });
+            }, name);
         }
 
         public B trying(Consumer<? super TryBuilder<?>> cb) {
             boolean[] done = new boolean[1];
             TryBuilder<Void> tb = new TryBuilder<>(b -> {
-                addDebugStackTraceElementComment();
-                addStatement(b);
+                add(b);
                 done[0] = true;
                 return null;
             });
@@ -7093,8 +7147,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             boolean[] closed = new boolean[1];
             InvocationBuilder<Void> ib = new InvocationBuilder<>(b -> {
                 closed[0] = true;
-                addDebugStackTraceElementComment();
-                addStatement(new StatementWrapper(b));
+                add(new StatementWrapper(b));
                 return null;
             }, method);
             c.accept(ib);
@@ -7106,13 +7159,13 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public T andThrow(String what) {
-            addStatement(new StatementWrapper(new Composite(new Adhoc("throw"), new Adhoc(checkIdentifier(notNull("what", what))))));
+            add(new StatementWrapper(new Composite(new Adhoc("throw"), new Adhoc(checkIdentifier(notNull("what", what))))));
             return endBlock();
         }
 
         public NewBuilder<T> andThrow() {
             NewBuilder<T> result = new NewBuilder<>(nb -> {
-                addStatement(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
+                add(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
                 return endBlock();
             });
             return result;
@@ -7121,7 +7174,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B andThrow(Consumer<? super NewBuilder<?>> c) {
             Holder<B> h = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
-                addStatement(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
+                add(new StatementWrapper(new Composite(new Adhoc("throw"), nb)));
                 h.set(cast());
                 return null;
             });
@@ -7134,18 +7187,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public AssignmentBuilder<B> assign(String variable) {
             return new AssignmentBuilder<>(b -> {
-                addDebugStackTraceElementComment();
-                addStatement(new StatementWrapper(b));
-                return cast();
+                return add(new StatementWrapper(b));
             }, new Adhoc(variable));
         }
 
         public FieldReferenceBuilder<AssignmentBuilder<B>> assignField(String variable) {
             return new FieldReferenceBuilder<>(variable, frb -> {
                 return new AssignmentBuilder<>(b -> {
-                    addDebugStackTraceElementComment();
-                    addStatement(new StatementWrapper(b));
-                    return cast();
+                    return add(new StatementWrapper(b));
                 }, frb);
             });
         }
@@ -7187,8 +7236,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             ArrayElementsBuilder<AssignmentBuilder<Void>> bldr
                     = new ArrayElementsBuilder<>(aedb -> {
                         return new AssignmentBuilder<>(assig -> {
-                            addStatement(new StatementWrapper(assig));
-                            hold.set(cast());
+                            hold.set(add(new StatementWrapper(assig)));
                             return null;
                         }, aedb);
                     });
@@ -7208,8 +7256,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public ArrayElementsBuilder<AssignmentBuilder<B>> assignArrayElement() {
             return new ArrayElementsBuilder<>(aedb -> {
                 return new AssignmentBuilder<>(assig -> {
-                    addStatement(new StatementWrapper(assig));
-                    return cast();
+                    return add(new StatementWrapper(assig));
                 }, aedb);
             });
         }
@@ -7217,8 +7264,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public ArrayElementsBuilder<AssignmentBuilder<B>> assignArrayElement(Object first) {
             return new ArrayElementsBuilder<AssignmentBuilder<B>>(aedb -> {
                 return new AssignmentBuilder<>(assig -> {
-                    addStatement(new StatementWrapper(assig));
-                    return cast();
+                    return add(new StatementWrapper(assig));
                 }, aedb);
             }).element(first.toString());
         }
@@ -7226,8 +7272,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B assign(String variable, Consumer<? super AssignmentBuilder<?>> c) {
             Holder<B> holder = new Holder<>();
             AssignmentBuilder<Void> ab = new AssignmentBuilder<>(b -> {
-                addStatement(new Composite(b, new Adhoc(";")));
-                holder.set(cast());
+                holder.set(add(new Composite(b, new Adhoc(";"))));
                 return null;
             }, new Adhoc(variable));
             c.accept(ab);
@@ -7242,21 +7287,18 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             if (expression.trim().charAt(expression.length() - 1) != ';') {
                 expression = expression.trim() + ';';
             }
-            addStatement(new Composite(new Adhoc("assert", true), new Adhoc(expression, true)));
-            return cast();
+            return add(new Composite(new Adhoc("assert", true), new Adhoc(expression, true)));
         }
 
         public B assertingNotNull(String expression) {
-            addStatement(new StatementWrapper(new Composite(new Adhoc("assert", true), new Adhoc(expression, true),
+            return add(new StatementWrapper(new Composite(new Adhoc("assert", true), new Adhoc(expression, true),
                     new Adhoc("!=", true), new Adhoc("null", true))));
-            return cast();
         }
 
         public ValueExpressionBuilder<AssertionBuilder<B>> assertingNotNull() {
             AssertionBuilder<B> res = new AssertionBuilder<>(ab -> {
                 assert !statements.contains(ab) : " Adding twice: " + ab;
-                addStatement(ab);
-                return cast();
+                return add(ab);
             }, false);
             return res.assertingNotNull();
         }
@@ -7267,8 +7309,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             ValueExpressionBuilder<AssertionBuilder<?>> bldr = new ValueExpressionBuilder<>(veb -> {
                 AssertionBuilder<Void> result = new AssertionBuilder<>(ab -> {
                     assert !statements.contains(ab) : " Adding twice: " + ab;
-                    addStatement(ab);
-                    hold.set(cast());
+                    hold.set(add(ab));
                     return null;
                 }, true);
                 secondary.set(result);
@@ -7288,8 +7329,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             return new ConditionBuilder<>(cb -> {
                 AssertionBuilder<B> bldr = new AssertionBuilder<>(ab -> {
                     assert !statements.contains(ab) : " Adding twice: " + ab;
-                    addStatement(ab);
-                    return cast();
+                    return add(ab);
                 }, false);
                 bldr.assertThat = cb;
                 return bldr;
@@ -7302,8 +7342,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             ConditionBuilder<AssertionBuilder<?>> bldr = new ConditionBuilder<>(cb -> {
                 AssertionBuilder<Void> second = new AssertionBuilder<>(ab -> {
                     assert !statements.contains(ab) : " Adding twice: " + ab;
-                    addStatement(ab);
-                    hold.set(cast());
+                    hold.set(add(ab));
                     return null;
                 }, true);
                 second.assertThat = cb;
@@ -7323,16 +7362,13 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public InvocationBuilder<B> invoke(String method) {
             return new InvocationBuilder<>(ib -> {
-                addDebugStackTraceElementComment();
-                addStatement(new Statement(ib));
-                return cast();
+                return add(new Statement(ib));
             }, method);
         }
 
         public BlockBuilder<B> block() {
             return new BlockBuilder<>(bk -> {
-                addStatement(bk);
-                return cast();
+                return add(bk);
             }, true);
         }
 
@@ -7348,25 +7384,19 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             if (stmt.endsWith(";")) {
                 stmt = stmt.substring(0, stmt.length() - 1);
             }
-            addDebugStackTraceElementComment();
-            addStatement(new OneStatement(stmt));
-            return cast();
+            return add(new OneStatement(stmt));
         }
 
         public FieldReferenceBuilder<B> returningField(String name) {
             return new FieldReferenceBuilder<>(name, fb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(fb));
-                return cast();
+                return add(new ReturnStatement(fb));
             });
         }
 
         public B returningField(String name, Consumer<FieldReferenceBuilder<?>> c) {
             Holder<B> holder = new Holder<>();
             FieldReferenceBuilder<Void> result = new FieldReferenceBuilder<>(name, frb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(frb));
-                holder.set(cast());
+                holder.set(add(new ReturnStatement(frb)));
                 return null;
             });
             c.accept(result);
@@ -7374,15 +7404,11 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B returning(String s) {
-            addDebugStackTraceElementComment();
-            addStatement(new ReturnStatement(new Adhoc(s)));
-            return cast();
+            return add(new ReturnStatement(new Adhoc(s)));
         }
 
         public B returning(Value value) {
-            addDebugStackTraceElementComment();
-            addStatement(new ReturnStatement(notNull("value", value)));
-            return cast();
+            return add(new ReturnStatement(notNull("value", value)));
         }
 
         /**
@@ -7391,9 +7417,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
          * @return this
          */
         public B returningThis() {
-            addDebugStackTraceElementComment();
-            addStatement(new ReturnStatement(new Adhoc("this")));
-            return cast();
+            return add(new ReturnStatement(new Adhoc("this")));
         }
 
         /**
@@ -7406,9 +7430,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
          */
         public NewBuilder<B> conditionallyReturningNew() {
             return new NewBuilder<>(nb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(nb));
-                return cast();
+                return add(new ReturnStatement(nb));
             });
         }
 
@@ -7423,9 +7445,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B conditionallyReturningNew(Consumer<NewBuilder<?>> c) {
             Holder<B> hold = new Holder<>();
             NewBuilder<Void> result = new NewBuilder<>(nb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(nb));
-                hold.set(cast());
+                hold.set(add(new ReturnStatement(nb)));
                 return null;
             });
             c.accept(result);
@@ -7434,16 +7454,12 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public ConditionBuilder<B> returningBoolean() {
             return new ConditionBuilder<B>(cb -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(cb));
-                return cast();
+                return add(new ReturnStatement(cb));
             });
         }
 
         public B returning(boolean what) {
-            addDebugStackTraceElementComment();
-            addStatement(new ReturnStatement(new Adhoc(Boolean.toString(what))));
-            return cast();
+            return add(new ReturnStatement(new Adhoc(Boolean.toString(what))));
         }
 
         public B returningNull() {
@@ -7451,31 +7467,24 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B returning(Number num) {
-            addDebugStackTraceElementComment();
-            addStatement(new ReturnStatement(friendlyNumber(num)));
-            return cast();
+            return add(new ReturnStatement(friendlyNumber(num)));
         }
 
         public B returningStringLiteral(String s) {
-            addDebugStackTraceElementComment();
-            addStatement(new ReturnStatement(new Adhoc(LinesBuilder.stringLiteral(s))));
-            return cast();
+            return add(new ReturnStatement(new Adhoc(LinesBuilder.stringLiteral(s))));
         }
 
         public StringConcatenationBuilder<B> returningStringConcatenation() {
             return new StringConcatenationBuilder<>(null, scb -> {
-                addStatement(new ReturnStatement(scb));
-                return cast();
+                return add(new ReturnStatement(scb));
             });
         }
 
         public B returningStringConcatenation(Consumer<StringConcatenationBuilder<?>> c) {
-            addDebugStackTraceElementComment();
             Holder<B> hold = new Holder<>();
             StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<>(
                     null, bldr -> {
-                        addStatement(new ReturnStatement(bldr));
-                        hold.set(cast());
+                        hold.set(add(new ReturnStatement(bldr)));
                         return null;
                     });
             c.accept(scb);
@@ -7484,12 +7493,10 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B returningStringConcatenation(String initialLiteral, Consumer<StringConcatenationBuilder<?>> c) {
-            addDebugStackTraceElementComment();
             Holder<B> hold = new Holder<>();
             StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<>(
                     new Adhoc(LinesBuilder.stringLiteral(initialLiteral)), bldr -> {
-                        addStatement(new ReturnStatement(bldr));
-                        hold.set(cast());
+                        hold.set(add(new ReturnStatement(bldr)));
                         return null;
                     });
             c.accept(scb);
@@ -7498,12 +7505,10 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B returningStringConcatenationExpression(String initialExpression, Consumer<StringConcatenationBuilder<?>> c) {
-            addDebugStackTraceElementComment();
             Holder<B> hold = new Holder<>();
             StringConcatenationBuilder<Void> scb = new StringConcatenationBuilder<>(
                     new Adhoc(initialExpression), bldr -> {
-                        addStatement(new ReturnStatement(bldr));
-                        hold.set(cast());
+                        hold.set(add(new ReturnStatement(bldr)));
                         return null;
                     });
             c.accept(scb);
@@ -7512,21 +7517,16 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public InvocationBuilder<B> returningInvocationOf(String method) {
-            addDebugStackTraceElementComment();
             return new InvocationBuilder<>(ib -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(ib));
-                return cast();
+                return add(new ReturnStatement(ib));
             }, method);
         }
 
         public X returningInvocationOf(String method, Consumer<? super InvocationBuilder<?>> c) {
-            addDebugStackTraceElementComment();
             boolean[] built = new boolean[1];
             Holder<X> holder = new Holder<>();
             InvocationBuilder<Void> b = new InvocationBuilder<>(ib -> {
-                addDebugStackTraceElementComment();
-                addStatement(new ReturnStatement(ib));
+                add(new ReturnStatement(ib));
                 built[0] = true;
                 X result = x();
                 holder.set(result);
@@ -7542,29 +7542,23 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         }
 
         public B incrementVariable(String var) {
-            addStatement(new OneStatement(var + "++"));
-            return cast();
+            return add(new OneStatement(var + "++"));
         }
 
         public B decrementVariable(String var) {
-            addStatement(new OneStatement(var + "--"));
-            return cast();
+            return add(new OneStatement(var + "--"));
         }
 
         public DeclarationBuilder<B> declare(String what) {
             return new DeclarationBuilder<>(db -> {
-                addDebugStackTraceElementComment();
-                addStatement(db);
-                return cast();
+                return add(db);
             }, what);
         }
 
         public B declare(String what, Consumer<DeclarationBuilder<?>> c) {
             Holder<B> h = new Holder<>();
             DeclarationBuilder<Void> result = new DeclarationBuilder<>(db -> {
-                addDebugStackTraceElementComment();
-                addStatement(db);
-                h.set(cast());
+                h.set(add(db));
                 return null;
             }, what);
             c.accept(result);
@@ -7573,18 +7567,14 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         public SwitchBuilder<B> switchingOn(String on) {
             return new SwitchBuilder<>(sb -> {
-                addDebugStackTraceElementComment();
-                addStatement(sb);
-                return cast();
+                return add(sb);
             }, on);
         }
 
         public InvocationBuilder<SwitchBuilder<B>> switchingOnInvocationOf(String mth) {
             return new InvocationBuilder<>(ib -> {
                 return new SwitchBuilder<B>(sb -> {
-                    addDebugStackTraceElementComment();
-                    addStatement(sb);
-                    return cast();
+                    return add(sb);
                 }, ib);
             }, mth);
         }
@@ -7594,9 +7584,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
             Holder<SwitchBuilder<Void>> switcher = new Holder<>();
             InvocationBuilder<SwitchBuilder<?>> result = new InvocationBuilder<>(ib -> {
                 SwitchBuilder<Void> sw = new SwitchBuilder<Void>(sb -> {
-                    addDebugStackTraceElementComment();
-                    addStatement(sb);
-                    h.set(cast());
+                    h.set(add(sb));
                     return null;
                 }, ib);
                 switcher.set(sw);
@@ -7614,8 +7602,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         public B switchingOn(String on, Consumer<? super SwitchBuilder<?>> c) {
             boolean[] built = new boolean[1];
             SwitchBuilder<Void> sw = new SwitchBuilder<>(sb -> {
-                addDebugStackTraceElementComment();
-                addStatement(sb);
+                add(sb);
                 built[0] = true;
                 return null;
             }, on);
@@ -7638,6 +7625,7 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
                 throw new IllegalStateException("Block built twice", built);
             }
             built = new Exception("endBlock");
+            emitDebugLineComment(statements);
             return converter.apply(cast());
         }
 
@@ -7711,6 +7699,30 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         @Override
         public void generateInto(LinesBuilder lines) {
             lines.lineComment(trailing, line);
+        }
+
+        // Needed to deduplicate debug stack trace elements, so
+        // we don't emit a string of the same line
+        @Override
+        public int hashCode() {
+            int hash = 3;
+            hash = 53 * hash + Objects.hashCode(this.line);
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            final LineComment other = (LineComment) obj;
+            return Objects.equals(this.line, other.line);
         }
     }
 
@@ -7862,10 +7874,16 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
         private final String name;
         private CodeGenerator as;
         private CodeGenerator initializer;
+        private boolean omitNewline;
 
         DeclarationBuilder(Function<DeclarationBuilder<T>, T> converter, String name) {
             this.converter = converter;
             this.name = checkIdentifier(name);
+        }
+
+        DeclarationBuilder<T> omitNewline() {
+            omitNewline = true;
+            return this;
         }
 
         public String declaredVariableName() {
@@ -8076,15 +8094,25 @@ public final class ClassBuilder<T> implements CodeGenerator, NamedMember, Source
 
         @Override
         public void generateInto(LinesBuilder lines) {
-            lines.onNewLine();
-            lines.statement(l -> {
+            if (omitNewline) {
+
                 as.generateInto(lines);
-                l.word(name);
+                lines.word(name);
                 if (initializer != null) {
-                    l.word("=");
-                    initializer.generateInto(l);
+                    lines.word("=");
+                    initializer.generateInto(lines);
                 }
-            });
+            } else {
+                lines.onNewLine();
+                lines.statement(l -> {
+                    as.generateInto(lines);
+                    l.word(name);
+                    if (initializer != null) {
+                        l.word("=");
+                        initializer.generateInto(l);
+                    }
+                });
+            }
         }
 
         public ArrayLiteralBuilder<T> initializedAsNewArray(String type) {

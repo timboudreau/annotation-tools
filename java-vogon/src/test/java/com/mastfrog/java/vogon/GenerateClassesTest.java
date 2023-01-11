@@ -376,7 +376,7 @@ public class GenerateClassesTest {
 
     private static void generateSimpleBean(ThrowingConsumer<ClassBuilder<String>> c) throws Exception {
         ClassBuilder<String> cb = ClassBuilder.forPackage(packageName).named("SimpleBean")
-                .withModifier(PUBLIC);
+                .withModifier(PUBLIC).generateDebugLogCode();
         cb.field("foo").withModifier(Modifier.PRIVATE).initializedWith("Hello");
         cb.constructor().setModifier(Modifier.PUBLIC).emptyBody();
         cb.publicMethod("getFoo").returning("String").body(bb -> {
@@ -390,7 +390,6 @@ public class GenerateClassesTest {
                     .endBlock();
         });
         cb.overridePublic("toString").returning("String").body(bb -> {
-//            bb.returning("\"SimpleBean(\" + getFoo() + \")\"");
             bb.returningValue().concatenate("SimpleBean(").with().invoke("getFoo").inScope().with().literal(")").endConcatenation();
         });
         c.accept(cb);

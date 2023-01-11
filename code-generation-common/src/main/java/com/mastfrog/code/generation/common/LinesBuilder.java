@@ -652,7 +652,8 @@ public final class LinesBuilder {
     }
 
     public LinesBuilder block(boolean leadingNewline, Consumer<LinesBuilder> c) {
-        sb.append(' ').append(settings.blockOpen());
+        space();
+        sb.append(settings.blockOpen());
         currIndent++;
         if (leadingNewline) {
             sb.append(doubleNewlineIndentChars());
@@ -660,10 +661,12 @@ public final class LinesBuilder {
             sb.append(newlineIndentChars());
         }
         try {
+            backup().onNewLine();
             c.accept(this);
         } finally {
+            backup().onNewLine();
+//            maybeNewline();
             currIndent--;
-            maybeNewline();
             int expectedLeadingSpaces = (currIndent * settings.indentBy());
             int realLeadingSpaces = leadingSpaces();
             if (realLeadingSpaces > expectedLeadingSpaces) {
