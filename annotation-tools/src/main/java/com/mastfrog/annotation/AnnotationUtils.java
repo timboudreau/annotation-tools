@@ -1423,10 +1423,7 @@ public final class AnnotationUtils {
 
     @SuppressWarnings("unchecked")
     public AnnotationMirrorTestBuilder<Predicate<? super AnnotationMirror>, ? extends AnnotationMirrorTestBuilder<?, ?>> testMirror() {
-        // XXX the line below compiles fine on JDK 9 but not on JDK 8, and we
-        // are still targetting JDK 8.  Compiler bug?  Better inferencing in 9?
-//        return new AnnotationMirrorTestBuilder<>(this, amtb -> amtb.predicate());
-        return new AnnotationMirrorTestBuilder(this, amtb -> ((AnnotationMirrorTestBuilder) amtb).predicate());
+        return new AnnotationMirrorTestBuilder<>(this, amtb -> amtb.predicate());
     }
 
     public MultiAnnotationTestBuilder multiAnnotations() {
